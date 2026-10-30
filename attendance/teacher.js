@@ -318,7 +318,7 @@
 
   async function makeQrCanvas(s, url) {
     try { await Promise.all([document.fonts.load('700 60px Sarabun'), document.fonts.load('400 40px Sarabun')]); } catch (e) { /* ใช้ฟอนต์สำรอง */ }
-    const W = 1080, H = 1500, FONT = 'Sarabun, "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif';
+    const W = 1080, H = 1700, FONT = 'Sarabun, "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif';
     const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
     const g = c.getContext('2d');
     const text = (t, y, size, weight, color) => {
@@ -343,6 +343,10 @@
     text(`ตรงเวลาถึง ${thTime(s.onTimeUntil)} น. · รับเช็กชื่อถึง ${thTime(s.closeAt)} น.`, yb, 46, 700, '#12805c');
     text('สแกนด้วยกล้องโทรศัพท์ แล้วเข้าสู่ระบบด้วยเลขประจำตัว + PIN', yb + 62, 36, 400, '#475467');
     text('ห้ามส่งรูปนี้ให้เพื่อนที่ไม่ได้อยู่ในห้องเรียน', yb + 112, 32, 400, '#c62d2d');
+    try {
+      const logo = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = siteBase() + 'img/logo.webp'; });
+      g.save(); g.beginPath(); g.arc(W / 2, H - 100, 80, 0, Math.PI * 2); g.clip(); g.drawImage(logo, W / 2 - 80, H - 180, 160, 160); g.restore();
+    } catch (e) { /* ไม่มีโลโก้ก็ยังใช้งานได้ */ }
     return c;
   }
 
