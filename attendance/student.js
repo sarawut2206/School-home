@@ -2,7 +2,8 @@
 (function () {
   const params = new URLSearchParams(location.search);
   let pending = params.get('s') && params.get('t') ? { s: params.get('s'), t: params.get('t') } : null;
-  if (pending) history.replaceState(null, '', location.pathname); // กัน QR ค้างอยู่ใน URL/ประวัติเบราว์เซอร์
+  let pendingAsg = params.get('a') || null;   // ลิงก์ส่งงานที่ครูส่งให้ (?a=รหัสงาน)
+  if (pending || pendingAsg) history.replaceState(null, '', location.pathname); // กัน QR/ลิงก์ค้างอยู่ใน URL/ประวัติเบราว์เซอร์
 
   let session = null;          // { token, student, exp }
   let me = null;               // ข้อมูลจาก action "me"
@@ -10,6 +11,7 @@
   let activeAsg = null;        // งานที่กำลังส่ง
   let photos = [];             // รูปที่เลือกไว้ (ย่อแล้ว)
   let setupId = '';
+  let batchId = null;          // รหัสรอบการส่ง คงเดิมเมื่อกดส่งซ้ำหลังเน็ตหลุด เพื่อไม่ให้รูปซ้ำ
 
   const show = (id) => ['view-login', 'view-setup', 'view-app'].forEach((v) => $('#' + v).classList.toggle('hidden', v !== id));
   const showNav = (on) => $('#nav').classList.toggle('hidden', !on);
@@ -94,6 +96,14 @@
       }
     }
     await refresh();
+    if (!me) return;   // เข้าสู่ระบบหมดอายุ: รอให้ล็อกอินใหม่ แล้วค่อยเปิดลิงก์งานต่อ
+    if (pendingAsg) {
+      const a = me && me.assignments.find((x) => x.assignmentId === pendingAsg);
+      pendingAsg = null;
+      if (a && a.status === 'open' && !(a.mine && a.mine.status === 'done')) { activeAsg = a; photos = []; batchId = null; renderSubmit(); switchTab('submit'); return; }
+      if (a) { switchTab('submit'); toast(a.status === 'open' ? 'งานนี้ครูตรวจแล้ว' : 'งานนี้ปิดรับแล้ว', true); return; }
+      toast('ไม่พบงานนี้ในห้องของคุณ', true);
+    }
     switchTab('checkin');
   }
 
@@ -155,11 +165,14 @@
         <div class="small muted">คะแนนเต็ม ${fmtNum(a.maxScore)}${a.due ? ' · กำหนดส่ง ' + esc(thDateTime(a.due)) : ''}${a.status === 'closed' ? ' · ปิดรับแล้ว' : ''}</div></div>
         ${badge(st)}</div>
         ${m ? `<p class="small" style="margin-top:8px">ส่งแล้ว ${m.count} รูป · รอบที่ ${m.round}${score}${m.late ? ' · ส่งช้า' : ''}</p>` : ''}
+        ${a.description ? `<p class="small" style="white-space:pre-wrap;margin-top:8px">${esc(a.description)}</p>` : ''}
         ${m && m.comment ? `<p class="small"><b>ครูเขียนว่า:</b> ${esc(m.comment)}</p>` : ''}
+        ${a.receipts && a.receipts.length ? `<div class="row" style="margin:8px 0">${a.receipts.map((r) => `<button class="btn sm" data-rc="${esc(r.receiptId)}" type="button">📄 ใบหลักฐาน ครั้งที่ ${r.round}</button>`).join('')}</div>` : ''}
         ${a.status === 'open' && !(m && m.status === 'done')
           ? `<button class="btn primary block" data-asg="${esc(a.assignmentId)}" type="button">${m ? (m.status === 'revise' ? 'ส่งงานที่แก้ไขแล้ว' : 'ส่งเพิ่ม/ส่งใหม่') : 'ส่งงานนี้'}</button>` : ''}
       </div>`;
     }).join('');
+    $$('[data-rc]', el).forEach((b) => b.addEventListener('click', () => openReceipt(b.dataset.rc)));
     $$('[data-asg]', el).forEach((b) => b.addEventListener('click', () => { activeAsg = me.assignments.find((a) => a.assignmentId === b.dataset.asg); photos = []; renderSubmit(); window.scrollTo({ top: 0 }); }));
   }
 
@@ -169,6 +182,8 @@
       <div class="card">
         <button class="btn sm" type="button" id="sub-back">← กลับ</button>
         <h2 style="margin-top:12px">${esc(a.title)}</h2>
+        ${a.subject ? `<div class="small muted">${esc(a.subject)}${a.classLabel ? ' · ' + esc(a.classLabel) : ''}</div>` : ''}
+        ${a.description ? `<p style="white-space:pre-wrap;margin-top:8px">${esc(a.description)}</p>` : ''}
         <p class="small muted">คะแนนเต็ม ${fmtNum(a.maxScore)}${a.due ? ' · กำหนดส่ง ' + esc(thDateTime(a.due)) : ''}</p>
         ${a.mine && a.mine.status === 'revise' ? `<p class="result warn small">ครูให้แก้ไข${a.mine.comment ? ': ' + esc(a.mine.comment) : ''}</p>` : ''}
         <div class="row">
@@ -203,7 +218,7 @@
   function drawThumbs() {
     const box = $('#thumbs'); if (!box) return;
     box.innerHTML = photos.map((p, i) => `<div class="thumb"><img src="${p.url}" alt="รูปที่ ${i + 1}"><button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}">✕</button></div>`).join('');
-    $$('[data-rm]', box).forEach((b) => b.addEventListener('click', () => { URL.revokeObjectURL(photos[b.dataset.rm].url); photos.splice(b.dataset.rm, 1); drawThumbs(); }));
+    $$('[data-rm]', box).forEach((b) => b.addEventListener('click', () => { URL.revokeObjectURL(photos[b.dataset.rm].url); photos.splice(b.dataset.rm, 1); batchId = null; drawThumbs(); }));
     const send = $('#sub-send');
     send.disabled = !photos.length;
     send.textContent = photos.length ? `ส่งงาน (${photos.length} รูป)` : 'ส่งงาน';
@@ -229,7 +244,8 @@
   }
 
   async function send() {
-    const btn = $('#sub-send'), total = photos.length, batchId = uuid();
+    const btn = $('#sub-send'), total = photos.length;
+    batchId = batchId || uuid();
     const bar = $('#progress'), fill = $('#progress i'), txt = $('#progress-text');
     btn.disabled = true; bar.classList.remove('hidden');
     $('#cam').disabled = true; $('#pick').disabled = true;
@@ -239,19 +255,28 @@
         fill.style.width = (i / total * 100) + '%';
         await api('submitImage', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, idx: i, data: photos[i].b64 }, { tries: 4 });
       }
-      fill.style.width = '100%';
-      const title = activeAsg.title;
-      photos.forEach((p) => URL.revokeObjectURL(p.url));
-      photos = []; activeAsg = null;
+      fill.style.width = '100%'; txt.textContent = 'กำลังออกใบหลักฐาน…';
+      const receipt = await api('submitFinish', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, count: total }, { tries: 4 });
+      const title = activeAsg.title, urls = photos.map((p) => p.url);
+      photos = []; activeAsg = null; batchId = null;
       await refresh();
       switchTab('submit');
-      $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">✅</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} รูป · รอครูตรวจ</p></div>`);
+      $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">✅</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} รูป · เลขที่ ${esc(receipt.receipt.receiptId)}</p></div>`);
       window.scrollTo({ top: 0 });
+      await Receipt.show(receipt, () => Promise.all(urls.map(Receipt.loadImage)));
+      urls.forEach((u) => URL.revokeObjectURL(u));
     } catch (e) {
       if (authLost(e)) return;
       toast((e.message || 'ส่งไม่สำเร็จ') + ' (รูปที่เลือกยังอยู่ กดส่งอีกครั้งได้)', true);
       $('#cam').disabled = false; $('#pick').disabled = false; btn.disabled = false; bar.classList.add('hidden');
     }
+  }
+
+  async function openReceipt(id) {
+    try {
+      const data = await api('myReceipt', { token: session.token, receiptId: id });
+      await Receipt.show(data, (d, prog) => Receipt.imagesFromServer(d.files, (fid) => api('myImage', { token: session.token, fileId: fid }), prog));
+    } catch (e) { if (!authLost(e)) toast(e.message, true); }
   }
 
   // ───── แท็บผลของฉัน ─────

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>NK EduTrack · ตรวจสอบใบหลักฐาน</title>
+<link rel="icon" type="image/png" href="img/favicon.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="./"><img class="logo" src="img/logo.webp" alt="" width="36" height="36"><span>NK EduTrack · ตรวจสอบใบหลักฐาน</span></a>
+</div></header>
+<main class="narrow">
+  <div class="card" id="box"><p class="center muted">กำลังตรวจสอบ…</p></div>
+</main>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(async function () {
+  const p = new URLSearchParams(location.search), box = $('#box');
+  try {
+    const r = await api('verify', { id: p.get('r') || '', k: p.get('k') || '' });
+    box.innerHTML = `
+      <div class="result ${r.late ? 'warn' : 'ok'}" role="status"><div class="big" aria-hidden="true">${r.late ? '⏰' : '✅'}</div>
+        <h2>ระบบรับงานนี้แล้ว${r.late ? ' (ส่งช้ากว่ากำหนด)' : ''}</h2><p>เลขที่ใบหลักฐาน ${esc(r.receiptId)}</p></div>
+      <table style="margin-top:12px"><tbody>
+        <tr><th>ใบงาน</th><td>${esc(r.title)}${r.subject ? '<div class="small muted">' + esc(r.subject) + (r.classLabel ? ' · ' + esc(r.classLabel) : '') + '</div>' : ''}</td></tr>
+        <tr><th>ผู้ส่ง</th><td>${esc(r.studentName)}<div class="small muted">${esc(r.studentId)}</div></td></tr>
+        <tr><th>วัน/เวลาที่ส่ง</th><td>${esc(thDate(r.submittedAt))} ${esc(String(r.submittedAt).slice(11, 19))} น.</td></tr>
+        <tr><th>จำนวนภาพ</th><td>${r.count} ภาพ · ส่งครั้งที่ ${r.round}</td></tr></tbody></table>
+      <p class="small muted" style="margin-top:12px">หน้านี้ยืนยันเฉพาะว่าระบบได้รับไฟล์ ไม่ใช่การรับรองคะแนนหรือความถูกต้องของงาน</p>`;
+  } catch (e) {
+    box.innerHTML = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">❌</div><h2>ตรวจสอบไม่ผ่าน</h2><p>${esc(e.message || 'เกิดข้อผิดพลาด')}</p></div>`;
+  }
+})();
+</script>
+</body>
+</html>

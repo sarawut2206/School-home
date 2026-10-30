@@ -412,16 +412,27 @@
           <label class="field">ชื่องาน<input id="as-title" type="text" maxlength="80" required placeholder="เช่น ใบงานที่ 1 สมการ"></label>
           <label class="field">คะแนนเต็ม<input id="as-max" type="number" min="1" step="0.5" value="10" required></label>
           <label class="field">กำหนดส่ง (ไม่บังคับ)<input id="as-due" type="datetime-local"><span class="hint">ส่งหลังเวลานี้ระบบจะติดป้าย "ส่งช้า"</span></label>
+          <label class="field">วิชา<input id="as-subject" type="text" maxlength="60" list="as-subjects" placeholder="เช่น คณิตศาสตร์"><datalist id="as-subjects"></datalist></label>
+          <label class="field">ชั้นเรียน (ขึ้นบนใบหลักฐาน)<input id="as-class" type="text" maxlength="20" placeholder="เช่น ม.4/2"></label>
+          <label class="field" style="grid-column:1/-1">รายละเอียดใบงาน (นักเรียนเห็น และขึ้นบนใบหลักฐาน)<textarea id="as-desc" maxlength="600" placeholder="เช่น จงแก้สมการเชิงเส้นตัวแปรเดียว พร้อมแสดงวิธีทำอย่างละเอียด จำนวน 10 ข้อ"></textarea></label>
         </div><button class="btn primary" type="submit">สร้างงาน</button></form></div>
       <div class="card"><h2>งานทั้งหมด</h2><div id="as-list" class="muted">กำลังโหลด…</div></div>`;
-    $('#as-room').addEventListener('change', (e) => setRoom(e.target.value));
+    const fillDefaults = async () => {
+      try { if (!tb) tb = await T('t_timetable', {}); } catch (e) { return; }
+      const rm = $('#as-room').value, slots = tb.slots.filter((x) => x.room === rm);
+      if (slots.length && !$('#as-class').value) $('#as-class').value = classText(slots[0].classLabel);
+      $('#as-subjects').innerHTML = Array.from(new Set(slots.map((x) => x.subject))).map((x) => `<option value="${esc(x)}">`).join('');
+      if (!$('#as-subject').value && slots.length === 1) $('#as-subject').value = slots[0].subject;
+    };
+    $('#as-room').addEventListener('change', (e) => { setRoom(e.target.value); $('#as-class').value = ''; $('#as-subject').value = ''; fillDefaults(); });
+    fillDefaults();
     $('#as-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const due = $('#as-due').value;
       await busy(ev.submitter, async () => {
         try {
-          await T('t_createAssignment', { room: $('#as-room').value, title: $('#as-title').value, maxScore: $('#as-max').value, due: due ? due.replace('T', ' ') + ':00' : '' });
-          toast('สร้างงานแล้ว'); $('#as-title').value = ''; loadAssignments();
+          await T('t_createAssignment', { room: $('#as-room').value, title: $('#as-title').value, maxScore: $('#as-max').value, due: due ? due.replace('T', ' ') + ':00' : '', description: $('#as-desc').value, subject: $('#as-subject').value, classLabel: $('#as-class').value });
+          toast('สร้างงานแล้ว กด "คัดลอกลิงก์ส่งงาน" แล้วส่งให้นักเรียนได้เลย'); $('#as-title').value = ''; $('#as-desc').value = ''; loadAssignments();
         } catch (e) { fail(e); }
       });
     });
@@ -434,8 +445,13 @@
       box.innerHTML = r.assignments.length ? r.assignments.map((a) => `<div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)">
         <div class="grow"><b>${esc(a.title)}</b> <span class="muted small">· ${esc(roomLabel(a.room))} · เต็ม ${fmtNum(a.maxScore)}${a.due ? ' · ส่งภายใน ' + esc(thDateTime(a.due)) : ''}</span>
           <div class="small">ส่งแล้ว ${a.submitted}/${a.total} · รอตรวจ ${a.pending} ${a.status === 'closed' ? badge('none', 'ปิดรับแล้ว') : ''}</div></div>
+        <button class="btn sm" data-link="${esc(a.assignmentId)}" type="button">คัดลอกลิงก์ส่งงาน</button>
         <button class="btn sm primary" data-review="${esc(a.assignmentId)}" data-room="${esc(a.room)}" type="button">ตรวจงาน</button>
         <button class="btn sm" data-toggle="${esc(a.assignmentId)}" data-to="${a.status === 'open' ? 'closed' : 'open'}" type="button">${a.status === 'open' ? 'ปิดรับ' : 'เปิดรับอีกครั้ง'}</button></div>`).join('') : 'ยังไม่มีงาน';
+      $$('[data-link]', box).forEach((b) => b.addEventListener('click', async () => {
+        const url = `${siteBase()}student.html?a=${encodeURIComponent(b.dataset.link)}`;
+        try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์ส่งงานแล้ว นำไปส่งใน LINE ได้เลย'); } catch (e) { prompt('คัดลอกลิงก์นี้', url); }
+      }));
       $$('[data-review]', box).forEach((b) => b.addEventListener('click', () => { setRoom(b.dataset.room); reviewSel = b.dataset.review; openTab('review'); }));
       $$('[data-toggle]', box).forEach((b) => b.addEventListener('click', async () => { try { await T('t_setAssignmentStatus', { assignmentId: b.dataset.toggle, status: b.dataset.to }); loadAssignments(); } catch (e) { fail(e); } }));
     } catch (e) { fail(e); }
@@ -478,14 +494,29 @@
       <div class="row"><div class="grow"><b>${esc(a.title)}</b> <span class="muted small">คะแนนเต็ม ${fmtNum(a.maxScore)}</span></div>
         <label class="row small" style="gap:6px"><input type="checkbox" id="rv-only" ${rv.onlyPending ? 'checked' : ''}> แสดงเฉพาะรอตรวจ</label>
         <button class="btn primary sm" id="rv-start" type="button" ${cnt('pending') ? '' : 'disabled'}>เริ่มตรวจ (${cnt('pending')})</button></div>
+      <div class="grid cols-4" style="margin:10px 0">
+        <div class="stat"><b>${list.length}</b><span>นักเรียนทั้งหมด</span></div>
+        <div class="stat"><b>${list.length - cnt('missing')}</b><span>ส่งแล้ว</span></div>
+        <div class="stat"><b>${cnt('missing')}</b><span>ยังไม่ส่ง</span></div>
+        <div class="stat"><b>${cnt('pending')}</b><span>รอตรวจ</span></div></div>
+      <div class="small muted">ความคืบหน้าการส่งงาน ${list.length ? Math.round((list.length - cnt('missing')) / list.length * 1000) / 10 : 0}%</div>
+      <div class="bar" style="margin:4px 0 10px"><i style="width:${list.length ? (list.length - cnt('missing')) / list.length * 100 : 0}%"></i></div>
       <p class="row">${badge('pending', 'รอตรวจ ' + cnt('pending'))}${badge('done', 'ครบถ้วน ' + cnt('done'))}${badge('revise', 'ต้องแก้ไข ' + cnt('revise'))}${badge('none', 'ไม่ผ่าน ' + cnt('none'))}${badge('missing', 'ยังไม่ส่ง ' + cnt('missing'))}</p>
       <div class="scroll"><table><thead><tr><th>ชื่อ</th><th>สถานะ</th><th class="num">รูป</th><th class="num">คะแนน</th><th></th></tr></thead><tbody>${shown.map((s) => `<tr>
         <td>${esc(s.name)}<div class="small muted">${esc(s.studentId)}${s.submittedAt ? ' · ส่ง ' + esc(thDateTime(s.submittedAt)) : ''}${s.late ? ' · <b style="color:var(--bad)">ส่งช้า</b>' : ''}${s.round > 1 ? ' · รอบ ' + s.round : ''}</div></td>
         <td>${badge(s.status)}</td><td class="num">${s.count || ''}</td><td class="num">${s.score === null || s.status === 'missing' ? '' : fmtNum(s.score)}</td>
-        <td>${s.count ? `<button class="btn sm" data-open="${esc(s.studentId)}" type="button">ดูรูป</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+        <td>${s.count ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${esc(s.studentId)}" type="button">ดูรูป</button><button class="btn sm" data-rc="${esc(s.studentId)}" type="button">ใบหลักฐาน</button></div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#rv-only').addEventListener('change', (e) => { rv.onlyPending = e.target.checked; drawReview(); });
     $('#rv-start').addEventListener('click', () => openViewer(list.find((x) => x.status === 'pending').studentId, true));
+    $$('[data-rc]', body).forEach((b) => b.addEventListener('click', () => openTeacherReceipt(b.dataset.rc)));
     $$('[data-open]', body).forEach((b) => b.addEventListener('click', () => openViewer(b.dataset.open, false)));
+  }
+
+  async function openTeacherReceipt(studentId) {
+    try {
+      const d = await T('t_receipt', { assignmentId: reviewSel, studentId });
+      await Receipt.show(d, (dd, prog) => Receipt.imagesFromServer(dd.files, (fid) => T('t_image', { fileId: fid }), prog));
+    } catch (e) { fail(e); }
   }
 
   function openViewer(studentId, pendingOnly) {
