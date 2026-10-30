@@ -48,27 +48,26 @@
 
   async function renderCheckin() {
     stopLive();
-    const el = $('#p-checkin'), room = ensureRoom();
+    const el = $('#p-checkin');
+    try {
+      tb = tb || await T('t_timetable', {}); rooms = tb.rooms;
+      gridSess = (await T('t_sessions', {})).sessions;
+    } catch (e) { fail(e); return; }
+    const room = ensureRoom();
     el.innerHTML = `
       <div class="card">
-        <h2>เปิดคาบเช็กชื่อ</h2>
-        <div class="row">
-          <label class="field grow" style="margin:0">ห้อง<select id="ck-room">${roomOptions(room)}</select></label>
-          <label class="field grow" style="margin:0">วิชา/คาบ (ไม่บังคับ)<input id="ck-subject" type="text" maxlength="60" value="${esc(store.get('subject') || '')}" placeholder="เช่น คณิตศาสตร์ คาบ 3"></label>
-          <button class="btn primary" id="ck-open" type="button" style="align-self:end">เปิดคาบ / แสดง QR</button>
-        </div>
+        <div class="row"><div class="grow"><h2 style="margin:0">เปิดคาบเช็กชื่อ</h2>
+          <div class="small muted">กดที่ช่องวิชาในตาราง แล้วเลือกวันที่ → สร้าง QR ส่งให้นักเรียน (หรือเปิดฉายหน้าจอ)</div></div>
+          <button class="btn" id="tt-adhoc" type="button">QR นอกตาราง</button></div>
+        <div id="tt-grid">${ttGrid(false)}</div>
       </div>
       <div id="ck-live"></div>
-      <div class="card"><h3>คาบที่ผ่านมา</h3><div id="ck-past" class="muted">กำลังโหลด…</div></div>`;
+      <div class="card"><div class="row"><h3 class="grow" style="margin:0">คาบที่ผ่านมา</h3>
+        <label class="field" style="margin:0">ห้อง<select id="ck-room">${roomOptions(room)}</select></label></div>
+        <div id="ck-past" class="muted" style="margin-top:8px">กำลังโหลด…</div></div>`;
+    bindGrid(el);
+    $('#tt-adhoc').addEventListener('click', () => openQrDialog(null));
     $('#ck-room').addEventListener('change', (e) => { setRoom(e.target.value); renderCheckin(); });
-    $('#ck-open').addEventListener('click', (e) => busy(e.currentTarget, async () => {
-      store.set('subject', $('#ck-subject').value);
-      try {
-        const r = await T('t_openSession', { room: state.room, subject: $('#ck-subject').value });
-        await loadPast();
-        showSession(r.session.sessionId);
-      } catch (err) { fail(err); }
-    }));
     await loadPast(true);
   }
 
@@ -166,9 +165,14 @@
   const DAYS = ['', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
   let tb = null;     // { periods, slots, rooms }
   let cfgVals = null;
+  let gridSess = [];  // คาบที่เคยสร้าง (ใช้ติดป้ายบนตาราง)
+  let ttEdit = false; // โหมดแก้ไขตารางสอน
+  const addDays = (d, n) => new Date(new Date(d + 'T12:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
+  const nextDateFor = (day) => addDays(todayStr(), (day - dowOfToday() + 7) % 7);   // วันที่ใกล้ที่สุดที่ตรงกับวันของคาบ (วันนี้ถ้าตรงกัน)
   const appCfg = window.APP_CONFIG || {};
   const classText = (c) => { const m = String(c || '').match(/^(\d+)[./](\d+)$/); return m ? `ม.${m[1]}/${m[2]}` : String(c || ''); };
   const dowOf = (dateStr) => { const d = new Date(dateStr + 'T12:00:00Z').getUTCDay(); return d === 0 ? 7 : d; };
+  const dowOfToday = () => dowOf(todayStr());
   const nowHM = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
   const per = (n) => (tb.periods.find((p) => p.period === n) || {});
   const slotStart = (s) => per(s.startPeriod).start || '08:00';
@@ -188,50 +192,72 @@
   async function renderTimetable() {
     const el = $('#p-timetable');
     el.innerHTML = '<div class="card muted">กำลังโหลดตารางสอน…</div>';
-    let sess = [];
     try {
       tb = await T('t_timetable', {}); rooms = tb.rooms;
-      sess = (await T('t_sessions', {})).sessions.filter((s) => s.date === todayStr());
+      gridSess = (await T('t_sessions', {})).sessions;
     } catch (e) { fail(e); return; }
-    const dow = dowOf(todayStr()), now = nowHM();
-    const days = [1, 2, 3, 4, 5].concat([6, 7].filter((d) => tb.slots.some((s) => s.day === d)));
     el.innerHTML = `
       <div class="card"><div class="row"><div class="grow"><h2 style="margin:0">ตารางสอน</h2>
-        <div class="small muted">วันนี้ วัน${DAYS[dow]}ที่ ${esc(thDate(todayStr()))} · กด "สร้าง QR" ที่คาบที่จะสอน แล้วบันทึกรูปส่งให้นักเรียน</div></div>
+        <div class="small muted" id="tt-hint"></div></div>
         <button class="btn" id="tt-adhoc" type="button">QR นอกตาราง</button>
-        <button class="btn" id="tt-add" type="button">+ เพิ่มคาบ</button>
-        <button class="btn" id="tt-periods" type="button">ตั้งเวลาคาบ</button></div></div>
-      ${days.map((d) => {
-        const list = tb.slots.map((s, i) => ({ s, i })).filter((x) => x.s.day === d);
-        return `<div class="card"><h3>วัน${DAYS[d]} ${d === dow ? badge('present', 'วันนี้') : ''}</h3>
-          ${list.length ? list.map(({ s, i }) => {
-            const isNow = d === dow && slotStart(s) <= now && now < slotEnd(s);
-            const ses = d === dow && s.room ? sess.find((x) => x.room === s.room && x.label === slotLabel(s)) : null;
-            return `<div class="slot ${isNow ? 'now' : ''} ${s.room ? '' : 'plain'}">
-              <div class="slot-time"><b>${s.startPeriod}${s.endPeriod !== s.startPeriod ? '–' + s.endPeriod : ''}</b><span>${esc(slotStart(s))}–${esc(slotEnd(s))}</span></div>
-              <div class="grow"><b>${esc(s.subject)}</b> ${s.classLabel ? esc(classText(s.classLabel)) : ''}
-                <div class="small muted">${s.place ? 'ห้องเรียน ' + esc(s.place) : ''}${s.note ? ' · ' + esc(s.note) : ''}${isNow ? ' · กำลังเรียนอยู่' : ''}${ses ? ' · ' + (ses.status === 'open' ? 'เปิดเช็กชื่ออยู่' : 'เช็กชื่อแล้ว') + ' ' + ses.present + ' คน' : ''}</div></div>
-              ${s.room ? `<button class="btn sm ${ses ? '' : 'primary'}" data-act="${ses ? 'view' : 'qr'}" data-i="${i}" ${ses ? `data-sid="${esc(ses.sessionId)}"` : ''} type="button">${ses ? 'ดู QR / รายชื่อ' : 'สร้าง QR'}</button>` : ''}
-              <button class="btn sm" data-act="edit" data-i="${i}" type="button">แก้ไข</button></div>`;
-          }).join('') : '<p class="muted small" style="margin:0">ไม่มีคาบสอน</p>'}</div>`;
-      }).join('')}`;
+        <button class="btn" id="tt-edit" type="button"></button>
+        <button class="btn" id="tt-periods" type="button">ตั้งเวลาคาบ</button></div>
+        <div id="tt-grid"></div></div>`;
     $('#tt-adhoc').addEventListener('click', () => openQrDialog(null));
-    $('#tt-add').addEventListener('click', () => openSlotDialog(null));
     $('#tt-periods').addEventListener('click', openPeriodsDialog);
-    $$('[data-act]', el).forEach((b) => b.addEventListener('click', () => {
-      const s = tb.slots[Number(b.dataset.i)];
-      if (b.dataset.act === 'qr') openQrDialog(s);
-      else if (b.dataset.act === 'edit') openSlotDialog(Number(b.dataset.i));
-      else openExisting(b.dataset.sid, s.room);
-    }));
+    $('#tt-edit').addEventListener('click', () => { ttEdit = !ttEdit; paintTimetable(); });
+    paintTimetable();
   }
 
-  async function openExisting(sid, room) {
-    try {
-      const st = await T('t_sessionStatus', { sessionId: sid });
-      if (st.session.status === 'open' && st.session.mode === 'image') return showQrResult(st.session);
-    } catch (e) { fail(e); return; }
-    setRoom(room); openTab('checkin');
+  function paintTimetable() {
+    const dow = dowOf(todayStr());
+    $('#tt-edit').textContent = ttEdit ? '✓ เสร็จสิ้นการแก้ไข' : '✎ แก้ไขตาราง';
+    $('#tt-edit').classList.toggle('primary', ttEdit);
+    $('#tt-hint').innerHTML = ttEdit
+      ? 'โหมดแก้ไข: กดช่องวิชาเพื่อแก้/ลบ · กดช่องว่าง (+) เพื่อเพิ่มคาบ'
+      : `วันนี้ วัน${DAYS[dow]}ที่ ${esc(thDate(todayStr()))} · กดที่ช่องวิชา แล้วเลือกวันที่เพื่อสร้าง QR`;
+    $('#tt-grid').innerHTML = ttGrid(ttEdit);
+    bindGrid($('#p-timetable'));
+  }
+
+  // ตารางสอนแบบกริด (แถว = วัน, คอลัมน์ = คาบ) เหมือนตารางกระดาษ
+  function ttGrid(edit) {
+    const dow = dowOf(todayStr()), now = nowHM(), maxP = tb.periods.length;
+    const days = [1, 2, 3, 4, 5].concat([6, 7].filter((d) => tb.slots.some((s) => s.day === d)));
+    const head = tb.periods.map((p) => `<th class="g-p"><b>${p.period}</b><span>${esc(p.start)}<br>${esc(p.end)}</span></th>`).join('');
+    const rows = days.map((d) => {
+      let cells = '', p = 1;
+      while (p <= maxP) {
+        const i = tb.slots.findIndex((s) => s.day === d && s.startPeriod === p);
+        if (i < 0) { cells += edit ? `<td class="g-empty edit"><button type="button" class="g-add" data-add="${d}" data-p="${p}" aria-label="เพิ่มคาบ วัน${DAYS[d]} คาบ ${p}">+</button></td>` : '<td class="g-empty"></td>'; p++; continue; }
+        const s = tb.slots[i], span = Math.max(1, Math.min(s.endPeriod, maxP) - p + 1);
+        const isNow = d === dow && slotStart(s) <= now && now < slotEnd(s);
+        const ses = s.room ? gridSess.find((x) => x.room === s.room && x.label === slotLabel(s) && x.date === nextDateFor(d)) : null;
+        const inner = `<b>${esc(s.subject)}</b>${s.classLabel ? `<span>${esc(classText(s.classLabel))}</span>` : ''}${s.place ? `<span>${esc(s.place)}</span>` : ''}${ses ? `<em class="${ses.status === 'open' ? 'open' : ''}">${ses.status === 'open' ? 'เปิดอยู่' : 'เช็กแล้ว ' + ses.present}</em>` : ''}`;
+        const cls = `g-slot ${s.room ? 'room' : 'plain'} ${isNow ? 'now' : ''} ${edit ? 'edit' : ''}`;
+        cells += `<td colspan="${span}" class="${cls}">${s.room || edit ? `<button type="button" class="g-btn" data-i="${i}" aria-label="${esc(s.subject)} วัน${DAYS[d]} คาบ ${s.startPeriod}">${inner}</button>` : `<div class="g-btn">${inner}</div>`}</td>`;
+        p += span;
+      }
+      return `<tr><th class="g-d ${d === dow ? 'today' : ''}">${DAYS[d]}${d === dow ? '<small>วันนี้</small>' : ''}</th>${cells}</tr>`;
+    }).join('');
+    return `<div class="tt-wrap"><table class="tt"><thead><tr><th class="g-d">วัน / คาบ</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function bindGrid(root) {
+    const editing = ttEdit && state.tab === 'timetable';
+    $$('[data-i]', root).forEach((b) => b.addEventListener('click', () => {
+      const i = Number(b.dataset.i);
+      if (editing) openSlotDialog(i); else openQrDialog(tb.slots[i]);
+    }));
+    $$('[data-add]', root).forEach((b) => b.addEventListener('click', () => openSlotDialog(null, { day: Number(b.dataset.add), startPeriod: Number(b.dataset.p), endPeriod: Number(b.dataset.p) })));
+  }
+
+  // โหลดสถานะคาบใหม่แล้ววาดตารางซ้ำ (หลังสร้าง QR)
+  async function refreshGrid() {
+    try { gridSess = (await T('t_sessions', {})).sessions; } catch (e) { return; }
+    const g = $('#tt-grid'); if (!g) return;
+    g.innerHTML = ttGrid(ttEdit && state.tab === 'timetable');
+    bindGrid(g);
   }
 
   async function getCfg() {
@@ -245,11 +271,13 @@
     const hasRoom = slot && rooms.some((r) => r.room === slot.room);
     const room = hasRoom ? slot.room : ensureRoom();
     const start = slot ? slotStart(slot) : nowHM();
+    const date0 = slot ? nextDateFor(slot.day) : todayStr();
     const close = openModal(`
       <h2>${slot ? 'สร้าง QR เช็กชื่อ' : 'สร้าง QR นอกตารางสอน'}</h2>
-      ${slot ? `<p class="muted small">${esc(slot.subject)} ${esc(classText(slot.classLabel))} · ${esc(slotLabel(slot))}</p>` : ''}
+      ${slot ? `<p class="muted small">${esc(slot.subject)} ${esc(classText(slot.classLabel))} · วัน${DAYS[slot.day]} ${esc(slotLabel(slot))}</p>` : ''}
       <form id="qd">
         <div class="grid cols-2">
+          <label class="field" style="grid-column:1/-1">วันที่เช็กชื่อ<input id="qd-date" type="date" min="${todayStr()}" value="${date0}" required><span class="hint" id="qd-dow"></span></label>
           <label class="field">ห้องเรียนในระบบ<select id="qd-room">${roomOptions(room)}</select></label>
           <label class="field">วิชา / รหัสวิชา<input id="qd-subject" type="text" maxlength="60" value="${esc(slot ? slot.subject : store.get('subject') || '')}" required></label>
           <label class="field">เวลาเริ่มคาบ<input id="qd-start" type="time" value="${esc(start)}" required><span class="hint">คนที่เช็กชื่อหลังเวลานี้เกินที่กำหนดจะนับ "สาย"</span></label>
@@ -263,12 +291,20 @@
         <div class="row end"><button class="btn" type="button" id="qd-cancel">ยกเลิก</button><button class="btn primary" type="submit">สร้าง QR</button></div>
       </form>`);
     $('#qd-cancel').addEventListener('click', close);
+    const dateHint = () => {
+      const v = $('#qd-date').value, h = $('#qd-dow');
+      if (!v) { h.textContent = ''; return; }
+      const d = dowOf(v);
+      h.textContent = `วัน${DAYS[d]}ที่ ${thDate(v)}${v > todayStr() ? ' · สร้างไว้ล่วงหน้าได้ นักเรียนสแกนได้ตั้งแต่วันนั้น' : ''}${slot && d !== slot.day ? ` · ⚠ คาบนี้ในตารางสอนอยู่วัน${DAYS[slot.day]}` : ''}`;
+    };
+    $('#qd-date').addEventListener('input', dateHint); dateHint();
     $('#qd').addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      const date = $('#qd-date').value;
       const body = {
         room: $('#qd-room').value, subject: $('#qd-subject').value, mode: $('#qd-mode').value,
         label: slot ? slotLabel(slot) : 'นอกตารางสอน ' + $('#qd-start').value + ' น.', classLabel: slot ? slot.classLabel : '',
-        start: `${todayStr()} ${$('#qd-start').value}`, onTimeMin: Number($('#qd-on').value), lateMin: Number($('#qd-late').value)
+        start: `${date} ${$('#qd-start').value}`, onTimeMin: Number($('#qd-on').value), lateMin: Number($('#qd-late').value)
       };
       if (!slot) store.set('subject', body.subject);
       await busy(ev.submitter, async () => {
@@ -276,10 +312,11 @@
           let r = await T('t_openSession', body);
           if (r.differs) {
             const o = r.session;
-            if (!confirm(`ห้องนี้มีคาบที่เปิดอยู่แล้ว (${o.subject || ''} ${o.label || ''})\nปิดคาบนั้น (บันทึกขาดให้คนที่ยังไม่เช็ก) แล้วสร้างคาบใหม่?`)) return;
+            if (!confirm(`ห้องนี้มีคาบที่เปิดอยู่แล้วในวันเดียวกัน (${o.subject || ''} ${o.label || ''})\nปิดคาบนั้น (บันทึกขาดให้คนที่ยังไม่เช็ก) แล้วสร้างคาบใหม่?`)) return;
             r = await T('t_openSession', { ...body, replace: true });
           }
-          close();
+          if (r.existing) toast('คาบนี้มี QR อยู่แล้ว แสดงอันเดิม');
+          close(); refreshGrid();
           if (r.session.mode === 'image') showQrResult(r.session);
           else { setRoom(r.session.room); openTab('checkin'); toast('เปิดคาบแล้ว ฉาย QR ได้เลย'); }
         } catch (e) { fail(e); }
@@ -298,7 +335,7 @@
     const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
     const close = openModal(`
       <div class="row"><h2 class="grow" style="margin:0">QR พร้อมส่งให้นักเรียน</h2><button class="btn sm" id="qr-x" type="button">ปิด</button></div>
-      <p class="small muted">บันทึกรูปนี้แล้วส่งใน LINE กลุ่มห้อง ใช้สแกนได้ถึง ${esc(thTime(s.closeAt))} น. (ตรงเวลาถึง ${esc(thTime(s.onTimeUntil))} น.)</p>
+      <p class="small muted">บันทึกรูปนี้แล้วส่งใน LINE กลุ่มห้อง ใช้สแกนได้${s.date !== todayStr() ? ` ในวันที่ ${esc(thDate(s.date))}` : ''} ถึง ${esc(thTime(s.closeAt))} น. (ตรงเวลาถึง ${esc(thTime(s.onTimeUntil))} น.)</p>
       <img src="${URL.createObjectURL(blob)}" alt="QR Code เช็กชื่อ ${esc(s.subject)}" style="width:100%;max-width:440px;display:block;margin:0 auto 12px;border:1px solid var(--line);border-radius:12px">
       <div class="row">
         <button class="btn primary grow" id="qr-save" type="button">⬇ บันทึกรูป</button>
@@ -356,8 +393,8 @@
     cfgVals = null; renderTimetable();
   }
 
-  function openSlotDialog(i) {
-    const s = i === null ? { day: dowOf(todayStr()) > 5 ? 1 : dowOf(todayStr()), startPeriod: 1, endPeriod: 1, subject: '', classLabel: '', room: '', place: '', note: '' } : tb.slots[i];
+  function openSlotDialog(i, preset) {
+    const s = i === null ? { day: dowOf(todayStr()) > 5 ? 1 : dowOf(todayStr()), startPeriod: 1, endPeriod: 1, subject: '', classLabel: '', room: '', place: '', note: '', ...preset } : tb.slots[i];
     const pOpts = (sel) => tb.periods.map((p) => `<option value="${p.period}" ${p.period === sel ? 'selected' : ''}>คาบ ${p.period} (${esc(p.start)}–${esc(p.end)})</option>`).join('');
     const roomOpts = ['<option value="">— ไม่ใช่คาบสอนห้องเรียน (ประชุม/กิจกรรม) —</option>']
       .concat(rooms.map((r) => `<option value="${esc(r.room)}" ${r.room === s.room ? 'selected' : ''}>${esc(r.label)} (${r.count} คน)</option>`))

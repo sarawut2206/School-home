@@ -47,7 +47,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 label.field { display: grid; gap: 6px; font-weight: 600; margin-bottom: 12px; }
 label.field .hint { font-weight: 400; color: var(--muted); font-size: .85rem; }
-input[type=text], input[type=password], input[type=number], input[type=datetime-local], select, textarea {
+input[type=text], input[type=password], input[type=number], input[type=datetime-local], input[type=date], input[type=time], select, textarea {
   width: 100%; min-height: 46px; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--card);
 }
 textarea { min-height: 120px; resize: vertical; }
@@ -134,13 +134,34 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 480px) { .top .brand { font-size: .95rem; } .who { font-size: .8rem; } }
 .gradebar { position: sticky; bottom: -18px; background: var(--card); padding: 10px 0 4px; border-top: 1px solid var(--line); display: grid; gap: 10px; z-index: 2; }
 .viewer img { max-height: 52vh; }
-.slot { display: flex; gap: 12px; align-items: center; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; flex-wrap: wrap; }
-.slot.now { border-color: var(--ok); background: var(--ok-soft); }
-.slot.plain { background: var(--bg); }
-.slot-time { min-width: 76px; text-align: center; line-height: 1.25; }
-.slot-time b { display: block; font-size: 1.15rem; }
-.slot-time span { font-size: .78rem; color: var(--muted); white-space: nowrap; }
-.slot .grow { min-width: 140px; }
+/* ตารางสอนแบบกริด */
+.tt-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; }
+table.tt { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1020px; table-layout: fixed; }
+table.tt th, table.tt td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0; text-align: center; vertical-align: middle; }
+table.tt tr > :last-child { border-right: 0; }
+table.tt tbody tr:last-child > * { border-bottom: 0; }
+table.tt thead th { background: var(--bg); font-weight: 400; padding: 6px 2px; position: static; }
+.g-p b { display: block; font-size: 1.05rem; }
+.g-p span { display: block; font-size: .72rem; color: var(--muted); line-height: 1.2; white-space: nowrap; }
+table.tt .g-d { width: 74px; position: sticky; left: 0; z-index: 1; background: var(--bg); font-weight: 700; padding: 6px 4px; }
+.g-d small { display: block; font-size: .7rem; font-weight: 400; color: var(--ok); }
+.g-d.today { color: var(--ok); }
+table.tt tbody td { height: 74px; }
+.g-empty.edit { background: transparent; }
+.g-add { width: 100%; height: 100%; min-height: 74px; border: 0; background: transparent; color: var(--line); font-size: 1.4rem; cursor: pointer; }
+.g-add:hover, .g-add:focus-visible { background: var(--brand-soft); color: var(--brand); }
+.g-btn { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1px; width: 100%; min-height: 74px; padding: 6px 4px; border: 0; background: transparent; line-height: 1.25; font-size: .85rem; }
+button.g-btn { cursor: pointer; }
+.g-btn b { font-size: .95rem; }
+.g-btn span { color: var(--muted); font-size: .78rem; }
+.g-slot.room { background: var(--brand-soft); }
+button.g-btn:hover, button.g-btn:focus-visible { filter: brightness(.96); outline: 2px solid var(--brand); outline-offset: -2px; }
+.g-slot.plain { background: var(--bg); }
+.g-slot.plain .g-btn b { color: var(--muted); font-weight: 500; }
+.g-slot.now { box-shadow: inset 0 0 0 2px var(--ok); background: var(--ok-soft); }
+.g-slot.edit { outline: 1px dashed var(--brand); outline-offset: -3px; }
+.g-btn em { font-style: normal; font-size: .72rem; padding: 0 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); margin-top: 2px; }
+.g-btn em.open { background: var(--warn-soft); color: var(--warn); }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
 .logo { border-radius: 50%; flex: none; }
 .hero-logo { display: block; width: 168px; height: 168px; border-radius: 50%; margin: 12px auto 14px; box-shadow: var(--shadow); }
