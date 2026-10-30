@@ -1,5 +1,17 @@
 /* ตัวช่วยกลาง: เรียก API (Google Apps Script), เก็บค่าในเครื่อง, จัดรูปแบบวันที่ไทย */
 (function () {
+  const VERSION = '20261030c';
+  // ถ้าสคริปต์พัง ให้ขึ้นแถบแดงบอกสาเหตุ (ไม่เงียบ) นักเรียนถ่ายภาพหน้าจอส่งครูได้
+  const showFatal = (msg) => {
+    if (document.getElementById('fatal-bar')) return;
+    const d = document.createElement('div');
+    d.id = 'fatal-bar'; d.setAttribute('role', 'alert');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:300;background:#b42318;color:#fff;padding:.6rem 1rem;font-size:.9rem;text-align:center';
+    d.textContent = 'หน้าเว็บทำงานผิดพลาด: ' + String(msg).slice(0, 160) + ' · ลองรีเฟรช (Ctrl+F5) · เวอร์ชัน ' + VERSION;
+    document.body && document.body.appendChild(d);
+  };
+  window.addEventListener('error', (e) => showFatal(e.message || 'error'));
+  window.addEventListener('unhandledrejection', (e) => { const r = e.reason; if (r && r.code) return; showFatal((r && r.message) || r || 'promise'); });
   const cfg = window.APP_CONFIG || {};
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -142,7 +154,7 @@
 
   // ───── แอปติดตั้งได้ (PWA) ─────
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* ใช้เว็บปกติต่อได้ */ }); });
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => { /* ใช้เว็บปกติต่อได้ */ }); });
   }
   (function installButton() {
     const btn = document.getElementById('install-app');
@@ -158,6 +170,10 @@
       else alert(ios ? 'ติดตั้งบน iPhone/iPad:\n1) แตะปุ่มแชร์ (สี่เหลี่ยมมีลูกศรชี้ขึ้น) ที่แถบล่างของ Safari\n2) เลือก "เพิ่มไปยังหน้าจอโฮม"\n3) กด "เพิ่ม"' : 'เปิดเมนูของเบราว์เซอร์ (⋮) แล้วเลือก "ติดตั้งแอป" หรือ "เพิ่มลงในหน้าจอหลัก"');
     });
   })();
+
+  const ver = document.createElement('p');
+  ver.className = 'small muted center'; ver.style.cssText = 'margin:1.5rem 0 5.5rem;opacity:.7'; ver.textContent = 'NK EduTrack · เวอร์ชัน ' + VERSION;
+  (document.querySelector('main') || document.body).appendChild(ver);
 
   Object.assign(window, { $, $$, esc, store, uuid, deviceId, api, wait, thDate, thTime, thDateTime, todayStr, STATUS, badge, toast, busy, fmtNum, siteBase, icon, hydrate });
 })();

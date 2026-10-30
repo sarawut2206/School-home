@@ -1,6 +1,6 @@
 /* Service worker ของ NK EduTrack: ให้ติดตั้งเป็นแอปได้ และเปิดหน้าเว็บได้เร็วขึ้น
    ไม่แตะคำขอไปยัง API (script.google.com) เลย ข้อมูลจึงสดใหม่เสมอ */
-const CACHE = 'nk-edutrack-v1';
+const CACHE = 'nk-edutrack-v2';
 const SHELL = ['./', 'index.html', 'student.html', 'teacher.html', 'verify.html', 'app.css', 'common.js', 'student.js', 'teacher.js', 'receipt.js', 'config.js',
   'vendor/qrcode.min.js', 'img/logo.webp', 'img/favicon.png', 'img/icon-192.png', 'manifest-student.webmanifest', 'manifest-teacher.webmanifest'];
 
@@ -17,7 +17,7 @@ const keyOf = (url) => new Request(url.origin + url.pathname);
 async function networkFirst(req, url) {
   const cache = await caches.open(CACHE);
   try {
-    const res = await Promise.race([fetch(req), new Promise((_, rej) => setTimeout(rej, 4000))]);
+    const res = await Promise.race([fetch(req, { cache: 'no-cache' }), new Promise((_, rej) => setTimeout(rej, 4000))]);
     if (res && res.ok && res.type === 'basic') cache.put(keyOf(url), res.clone());
     return res;
   } catch (err) {
