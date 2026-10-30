@@ -14,6 +14,20 @@
   let loginMode = 'id';        // id = เลขประจำตัวอย่างเดียว · pin = เลขประจำตัว + PIN (ตามที่ครูตั้งในระบบ)
   let batchId = null;          // รหัสรอบการส่ง คงเดิมเมื่อกดส่งซ้ำหลังเน็ตหลุด เพื่อไม่ให้รูปซ้ำ
 
+  // เวลาที่ใช้ตัดสินเช็กชื่อคือเวลาประเทศไทยของเซิร์ฟเวอร์ ไม่ใช่นาฬิกาเครื่องนักเรียน
+  // จึงเก็บส่วนต่างระหว่างเวลาเซิร์ฟเวอร์กับนาฬิกาเครื่องไว้ เพื่อโชว์เวลาไทยที่ถูกต้องและเตือนเมื่อเครื่องตั้งเวลาเพี้ยน
+  let clockSkew = 0;           // ms: เวลาเซิร์ฟเวอร์ − นาฬิกาเครื่อง
+  const thMs = (s) => { const m = String(s || '').match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):?(\d\d)?/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 7, +m[5], +(m[6] || 0)) : NaN; };
+  const gotMe = (m) => { const t = m && thMs(m.serverTime); if (Number.isFinite(t)) clockSkew = t - Date.now(); return m; };
+  function clockNote() {
+    const now = new Date(Date.now() + clockSkew).toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
+    const tz = -new Date().getTimezoneOffset(), off = Math.abs(clockSkew) > 120000;
+    const warn = [];
+    if (tz !== 420) warn.push(`เครื่องของคุณตั้งเขตเวลาเป็น UTC${tz >= 0 ? '+' : '−'}${Math.abs(tz) / 60} ไม่ใช่เวลาประเทศไทย (UTC+7)`);
+    if (off) warn.push(`นาฬิกาเครื่องคลาดเคลื่อนจากเวลาจริงประมาณ ${Math.round(Math.abs(clockSkew) / 60000)} นาที`);
+    return `<div class="card" style="padding:.7rem 1rem"><div class="row"><span class="grow small">${icon('clock')} เวลาประเทศไทยตอนนี้ <b>${now} น.</b> <span class="muted">(ระบบนับเวลาไทยเสมอ)</span></span></div>${warn.length ? `<p class="small" style="margin:.4rem 0 0;color:var(--warn,#b45309)">${icon('alert')} ${warn.join(' · ')}<br><span class="muted">ไม่ทำให้เช็กชื่อผิด แต่ควรตั้งวันที่/เวลาของเครื่องเป็น "อัตโนมัติ" และเขตเวลา "กรุงเทพ"</span></p>` : ''}</div>`;
+  }
+
   function setMode(m) {
     loginMode = m === 'pin' ? 'pin' : 'id';
     $('#pin-wrap').classList.toggle('hidden', loginMode !== 'pin');
@@ -103,7 +117,7 @@
         checkinResult = { ok: false, code: e.code, message: e.message };
       }
     }
-    if (first && !hadPending) { me = first; renderCheckin(); renderSubmit(); renderMe(); } else await refresh();
+    if (first && !hadPending) { me = gotMe(first); renderCheckin(); renderSubmit(); renderMe(); } else await refresh();
     if (!me) return;   // เข้าสู่ระบบหมดอายุ: รอให้ล็อกอินใหม่ แล้วค่อยเปิดลิงก์งานต่อ
     if (pendingAsg) {
       const a = me && me.assignments.find((x) => x.assignmentId === pendingAsg);
@@ -116,7 +130,7 @@
   }
 
   async function refresh() {
-    try { me = await api('me', { token: session.token }); }
+    try { me = gotMe(await api('me', { token: session.token })); }
     catch (e) { if (!authLost(e)) toast(e.message, true); return; }
     renderCheckin(); renderSubmit(); renderMe();
   }
@@ -156,6 +170,7 @@
     }).join('');
     el.innerHTML = `
       ${top}
+      ${me ? clockNote() : ''}
       ${sessCards || `<div class="card"><h2>${icon('userCheck')}เช็กชื่อ</h2><p class="muted">ขณะนี้ยังไม่มีคาบที่เปิดเช็กชื่อ รอครูเปิดคาบ แล้วจะมีปุ่มเช็กชื่อขึ้นที่นี่ (หรือสแกน QR ที่ครูส่งให้)</p></div>`}
       <div class="card">
         <h3>${icon('info')}วิธีเช็กชื่อ</h3>
@@ -181,7 +196,7 @@
   // ถามสถานะคาบเป็นระยะ: ครูเปิดคาบแล้วปุ่มเช็กชื่อขึ้นเอง
   async function pollOpen() {
     if (!session || !me || document.hidden || $('#tab-checkin').classList.contains('hidden')) return;
-    try { me = await api('me', { token: session.token }, { tries: 1 }); renderCheckin(); } catch (e) { authLost(e); }
+    try { me = gotMe(await api('me', { token: session.token }, { tries: 1 })); renderCheckin(); } catch (e) { authLost(e); }
   }
   setInterval(pollOpen, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pollOpen(); });
