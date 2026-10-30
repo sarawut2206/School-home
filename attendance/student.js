@@ -54,7 +54,7 @@
     const id = $('#login-id').value.trim(), pin = $('#login-pin').value;
     await busy(btn, async () => {
       try {
-        btn.textContent = 'กำลังตรวจสอบ…';
+        btn.innerHTML = '<span class="spin"></span>กำลังเข้าสู่ระบบ… (รอสักครู่)';
         const res = await api('login', { id, pin });
         if (res.needSetup) {
           setMode('pin');
@@ -65,7 +65,7 @@
           return;
         }
         saveSession(res);
-        await enter();
+        await enter(res.me);
       } catch (e) { if (e.code === 'BAD_PIN') setMode('pin'); toast(e.message || 'เข้าสู่ระบบไม่สำเร็จ', true); }
     });
   });
@@ -81,18 +81,19 @@
         const res = await api('setPin', { id: setupId, pin, deviceId: deviceId() });
         saveSession(res);
         toast('ตั้ง PIN เรียบร้อย');
-        await enter();
+        await enter(res.me);
       } catch (e) { toast(e.message, true); }
     });
   });
   $('#logout').addEventListener('click', logout);
 
   // ───── เข้าแอป ─────
-  async function enter() {
+  async function enter(first) {   // first = ข้อมูลหน้าแรกที่ได้มากับการเข้าสู่ระบบ (ไม่ต้องเรียก me ซ้ำ)
     $('#who').textContent = session.student.name + ' · ห้อง ' + session.student.room;
     $('#who').classList.remove('hidden'); $('#logout').classList.remove('hidden');
     show('view-app'); showNav(true);
     $('#tab-checkin').innerHTML = '<div class="card center muted">กำลังโหลด…</div>';
+    const hadPending = !!pending;
     if (pending) {
       const p = pending; pending = null;
       try {
@@ -102,7 +103,7 @@
         checkinResult = { ok: false, code: e.code, message: e.message };
       }
     }
-    await refresh();
+    if (first && !hadPending) { me = first; renderCheckin(); renderSubmit(); renderMe(); } else await refresh();
     if (!me) return;   // เข้าสู่ระบบหมดอายุ: รอให้ล็อกอินใหม่ แล้วค่อยเปิดลิงก์งานต่อ
     if (pendingAsg) {
       const a = me && me.assignments.find((x) => x.assignmentId === pendingAsg);
