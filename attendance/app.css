@@ -144,3 +144,4 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
 .logo { border-radius: 50%; flex: none; }
 .hero-logo { display: block; width: 168px; height: 168px; border-radius: 50%; margin: 12px auto 14px; box-shadow: var(--shadow); }
+@media (max-width: 480px) { .top:has(.who:not(.hidden)) .brand span { display: none; } }

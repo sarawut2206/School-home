@@ -2,6 +2,7 @@
 (function () {
   let tt = store.get('tt', 'session');
   let rooms = [];
+  let loginMode = 'id';
   const state = { room: store.get('room') || '', tab: 'timetable' };
   const live = { sid: null, timers: [], nextAt: 0, token: '', fetching: false, lastKey: '' };
   const imgCache = new Map();
@@ -25,7 +26,7 @@
     await busy(ev.submitter, async () => {
       try {
         const r = await api('t_login', { pass: $('#pass').value });
-        tt = r.tt; rooms = r.rooms; store.set('tt', tt, 'session'); $('#pass').value = '';
+        tt = r.tt; rooms = r.rooms; loginMode = r.loginMode || loginMode; store.set('tt', tt, 'session'); $('#pass').value = '';
         ensureRoom(); show('app'); openTab('timetable');
       } catch (e) { fail(e); }
     });
@@ -258,7 +259,7 @@
             <option value="image">รูปภาพ ส่งให้นักเรียนได้</option>
             <option value="rotate">ฉายหน้าจอ รหัสหมุนทุก 45 วินาที</option></select></label>
         </div>
-        <p class="small muted" id="qd-hint">รูปภาพส่งต่อได้ จึงเหมาะกับการส่งใน LINE กลุ่มห้อง ระบบยังป้องกันด้วย PIN ของนักเรียนแต่ละคน, 1 เครื่อง = 1 คน (ติดธงถ้าซ้ำ) และหมดอายุตามเวลารับเช็กชื่อ</p>
+        <p class="small muted" id="qd-hint">รูปภาพส่งต่อได้ จึงเหมาะกับการส่งใน LINE กลุ่มห้อง ${loginMode === 'pin' ? 'ระบบยังป้องกันด้วย PIN ของนักเรียนแต่ละคน และ ' : 'ระบบป้องกันด้วย '}1 เครื่อง = 1 คน (ติดธงถ้าซ้ำ) และหมดอายุตามเวลารับเช็กชื่อ</p>
         <div class="row end"><button class="btn" type="button" id="qd-cancel">ยกเลิก</button><button class="btn primary" type="submit">สร้าง QR</button></div>
       </form>`);
     $('#qd-cancel').addEventListener('click', close);
@@ -341,7 +342,7 @@
     for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (q.isDark(r, col)) g.fillRect(x0 + (col + 4) * cell, y0 + (r + 4) * cell, cell, cell);
     const yb = y0 + size + 90;
     text(`ตรงเวลาถึง ${thTime(s.onTimeUntil)} น. · รับเช็กชื่อถึง ${thTime(s.closeAt)} น.`, yb, 46, 700, '#12805c');
-    text('สแกนด้วยกล้องโทรศัพท์ แล้วเข้าสู่ระบบด้วยเลขประจำตัว + PIN', yb + 62, 36, 400, '#475467');
+    text('สแกนด้วยกล้องโทรศัพท์ แล้วเข้าสู่ระบบด้วยเลขประจำตัว' + (loginMode === 'pin' ? ' + PIN' : ''), yb + 62, 36, 400, '#475467');
     text('ห้ามส่งรูปนี้ให้เพื่อนที่ไม่ได้อยู่ในห้องเรียน', yb + 112, 32, 400, '#c62d2d');
     try {
       const logo = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = siteBase() + 'img/logo.webp'; });
@@ -616,7 +617,7 @@
         <p class="small muted">คัดลอกจาก Excel (3 คอลัมน์: เลขประจำตัว, ชื่อ-นามสกุล, ห้อง) แล้ววางได้เลย นำเข้าซ้ำได้ ระบบไม่ลบ PIN เดิม</p>
         <textarea id="im-text" placeholder="12345&#9;นายตัวอย่าง ทดสอบ&#9;1"></textarea>
         <div class="row" style="margin-top:10px"><button class="btn primary" id="im-go" type="button">นำเข้า</button></div></div>
-      <div class="card"><div class="row"><h2 class="grow" style="margin:0">รายชื่อและ PIN</h2><select id="st-room" style="width:auto">${roomOptions(ensureRoom())}</select></div><div id="st-list" class="muted" style="margin-top:10px">กำลังโหลด…</div></div>
+      <div class="card"><div class="row"><h2 class="grow" style="margin:0">รายชื่อนักเรียน</h2><select id="st-room" style="width:auto">${roomOptions(ensureRoom())}</select></div><div id="st-list" class="muted" style="margin-top:10px">กำลังโหลด…</div></div>
       <div class="card"><h2>เกณฑ์คะแนนและตั้งค่า</h2><div id="cf-form" class="muted">กำลังโหลด…</div></div>
       <div class="card"><h2>เปลี่ยนรหัสผ่านครู</h2><form id="pw-form" class="row"><input id="pw-new" type="password" minlength="6" placeholder="รหัสใหม่ อย่างน้อย 6 ตัว" class="grow" autocomplete="new-password" required><button class="btn primary" type="submit">เปลี่ยนรหัส</button></form></div>`;
     $('#im-go').addEventListener('click', (e) => busy(e.currentTarget, async () => {
@@ -636,7 +637,9 @@
     try {
       const r = await T('t_students', { room: state.room });
       const box = $('#st-list'); if (!box) return;
-      box.innerHTML = r.students.length ? `<div class="scroll"><table><thead><tr><th>เลขประจำตัว</th><th>ชื่อ-สกุล</th><th>PIN</th><th></th></tr></thead><tbody>${r.students.map((s) => `<tr><td>${esc(s.id)}</td><td>${esc(s.name)}</td><td>${s.hasPin ? badge('done', 'ตั้งแล้ว') : badge('none', 'ยังไม่ตั้ง')}</td><td>${s.hasPin ? `<button class="btn sm" data-rs="${esc(s.id)}" type="button">รีเซ็ต PIN</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : 'ยังไม่มีรายชื่อ';
+      loginMode = r.loginMode || loginMode;
+      const pinCols = loginMode === 'pin';
+      box.innerHTML = r.students.length ? `<div class="scroll"><table><thead><tr><th>เลขประจำตัว (ใช้เข้าสู่ระบบ)</th><th>ชื่อ-สกุล</th>${pinCols ? '<th>PIN</th><th></th>' : ''}</tr></thead><tbody>${r.students.map((s) => `<tr><td>${esc(s.id)}</td><td>${esc(s.name)}</td>${pinCols ? `<td>${s.hasPin ? badge('done', 'ตั้งแล้ว') : badge('none', 'ยังไม่ตั้ง')}</td><td>${s.hasPin ? `<button class="btn sm" data-rs="${esc(s.id)}" type="button">รีเซ็ต PIN</button>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table></div>` : 'ยังไม่มีรายชื่อ';
       $$('[data-rs]', box).forEach((b) => b.addEventListener('click', async () => { if (!confirm('รีเซ็ต PIN ของ ' + b.dataset.rs + '? นักเรียนต้องตั้ง PIN ใหม่')) return; try { await T('t_resetPin', { id: b.dataset.rs }); toast('รีเซ็ตแล้ว'); loadStudents(); } catch (e) { fail(e); } }));
     } catch (e) { fail(e); }
   }
@@ -657,7 +660,7 @@
   // ───── เริ่มต้น ─────
   (async function init() {
     if (!tt) return show('login');
-    try { const r = await T('t_students', {}); rooms = r.rooms; ensureRoom(); show('app'); openTab('timetable'); }
+    try { const r = await T('t_students', {}); rooms = r.rooms; loginMode = r.loginMode || loginMode; ensureRoom(); show('app'); openTab('timetable'); }
     catch (e) { show('login'); }
   })();
 })();

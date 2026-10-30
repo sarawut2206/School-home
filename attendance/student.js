@@ -11,8 +11,14 @@
   let activeAsg = null;        // งานที่กำลังส่ง
   let photos = [];             // รูปที่เลือกไว้ (ย่อแล้ว)
   let setupId = '';
+  let loginMode = 'id';        // id = เลขประจำตัวอย่างเดียว · pin = เลขประจำตัว + PIN (ตามที่ครูตั้งในระบบ)
   let batchId = null;          // รหัสรอบการส่ง คงเดิมเมื่อกดส่งซ้ำหลังเน็ตหลุด เพื่อไม่ให้รูปซ้ำ
 
+  function setMode(m) {
+    loginMode = m === 'pin' ? 'pin' : 'id';
+    $('#pin-wrap').classList.toggle('hidden', loginMode !== 'pin');
+    $('#login-note').textContent = pending ? 'เข้าสู่ระบบเพื่อเช็กชื่อ (จะเช็กชื่อให้ทันทีหลังเข้าสู่ระบบ)' : (loginMode === 'pin' ? 'ใช้เลขประจำตัวนักเรียนและ PIN 4 หลักของคุณ' : 'ใส่เลขประจำตัวนักเรียนของคุณ');
+  }
   const show = (id) => ['view-login', 'view-setup', 'view-app'].forEach((v) => $('#' + v).classList.toggle('hidden', v !== id));
   const showNav = (on) => $('#nav').classList.toggle('hidden', !on);
 
@@ -51,6 +57,7 @@
         btn.textContent = 'กำลังตรวจสอบ…';
         const res = await api('login', { id, pin });
         if (res.needSetup) {
+          setMode('pin');
           setupId = id;
           $('#setup-name').textContent = res.name;
           $('#setup-pin').value = ''; $('#setup-pin2').value = '';
@@ -59,7 +66,7 @@
         }
         saveSession(res);
         await enter();
-      } catch (e) { toast(e.message || 'เข้าสู่ระบบไม่สำเร็จ', true); }
+      } catch (e) { if (e.code === 'BAD_PIN') setMode('pin'); toast(e.message || 'เข้าสู่ระบบไม่สำเร็จ', true); }
     });
   });
 
@@ -302,9 +309,10 @@
   // ───── เริ่มต้น ─────
   (async function init() {
     $('#login-id').value = store.get('lastId') || '';
+    api('ping', {}, { tries: 1 }).then((r) => setMode(r.loginMode)).catch(() => {});
     const s = loadSession();
     if (s) { session = s; await enter(); return; }
-    if (pending) $('#login-note').textContent = 'เข้าสู่ระบบเพื่อเช็กชื่อ (จะเช็กชื่อให้ทันทีหลังเข้าสู่ระบบ)';
+    setMode(loginMode);
     show('view-login');
   })();
 })();
