@@ -205,12 +205,12 @@
       const file = new File([png], name + '.png', { type: 'image/png' });
       const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
       panel.innerHTML = `
-        <div class="row"><div class="grow"><h2 style="margin:0">ใบหลักฐานการส่งงาน</h2><div class="small muted">${esc(name)} · ครั้งที่ ${data.receipt.round}</div></div><button class="btn sm" id="rcp-x" type="button">ปิด</button></div>
+        <div class="row"><div class="grow"><h2 style="margin:0">${icon('file')}ใบหลักฐานการส่งงาน</h2><div class="small muted">${esc(name)} · ครั้งที่ ${data.receipt.round}</div></div><button class="btn sm" id="rcp-x" type="button">ปิด</button></div>
         <img src="${URL.createObjectURL(png)}" alt="ใบหลักฐานการส่งงาน ${esc(name)}" style="width:100%;max-width:520px;display:block;margin:12px auto;border:1px solid var(--line);border-radius:8px;background:#fff">
         <div class="row" style="position:sticky;bottom:-18px;background:var(--card);padding:10px 0">
-          <button class="btn primary grow" id="rcp-png" type="button">⬇ บันทึกเป็นรูป</button>
-          <button class="btn grow" id="rcp-pdf" type="button">⬇ บันทึกเป็น PDF</button>
-          ${canShare ? '<button class="btn grow" id="rcp-share" type="button">↗ แชร์</button>' : ''}</div>`;
+          <button class="btn primary grow" id="rcp-png" type="button">${icon('download')} บันทึกเป็นรูป</button>
+          <button class="btn grow" id="rcp-pdf" type="button">${icon('file')} บันทึกเป็น PDF</button>
+          ${canShare ? '<button class="btn grow" id="rcp-share" type="button">' + icon('share') + ' แชร์</button>' : ''}</div>`;
       panel.querySelector('#rcp-x').addEventListener('click', close);
       panel.querySelector('#rcp-png').addEventListener('click', () => { download(png, name + '.png'); toast('บันทึกรูปแล้ว'); });
       panel.querySelector('#rcp-pdf').addEventListener('click', async (e) => { e.currentTarget.disabled = true; try { download(await toPdf(canvas), name + '.pdf'); toast('บันทึก PDF แล้ว'); } finally { e.currentTarget.disabled = false; } });

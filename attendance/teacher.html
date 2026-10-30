@@ -21,33 +21,33 @@
 <body>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="./"><img class="logo" src="img/logo.webp" alt="" width="36" height="36"><span>NK EduTrack · ครู</span></a>
-    <button class="btn sm hidden" id="install-app" type="button">📲 ติดตั้งแอป</button>
-    <button class="btn sm hidden" id="logout" type="button">ออกจากระบบ</button>
+    <a class="brand" href="./"><img class="logo" src="img/logo.webp" alt="" width="40" height="40"><span class="bt"><b>NK EduTrack</b><small>ระบบสำหรับครู · โรงเรียนมัธยมวัดหนองแขม</small></span></a>
+    <button class="btn sm hidden" id="install-app" type="button" aria-label="ติดตั้งแอป"><i data-ic="phone"></i><span class="lbl">ติดตั้งแอป</span></button>
+    <button class="btn sm hidden" id="logout" type="button" aria-label="ออกจากระบบ"><i data-ic="logout"></i><span class="lbl">ออกจากระบบ</span></button>
   </div>
 </header>
 
 <main>
   <section id="view-login" class="narrow hidden">
     <div class="card">
-      <h1>เข้าสู่ระบบครู</h1>
+      <div class="pagehead" style="margin-bottom:12px"><span class="tile"><i data-ic="lock"></i></span><div><h1 style="margin:0">เข้าสู่ระบบครู</h1><div class="small muted">ใส่รหัสผ่านเพื่อจัดการคาบเรียนและงาน</div></div></div>
       <form id="login-form">
         <label class="field">รหัสผ่านครู
           <input id="pass" type="password" autocomplete="current-password" required>
         </label>
-        <button class="btn primary block" type="submit">เข้าสู่ระบบ</button>
+        <button class="btn primary block" type="submit"><i data-ic="logout"></i>เข้าสู่ระบบ</button>
       </form>
     </div>
   </section>
 
   <section id="view-app" class="wrap hidden">
     <div class="tabs" role="tablist" id="tabs">
-      <button class="tab" role="tab" data-tab="timetable" aria-selected="true">ตารางสอน · สร้าง QR</button>
-      <button class="tab" role="tab" data-tab="checkin" aria-selected="false">เช็กชื่อสด</button>
-      <button class="tab" role="tab" data-tab="assign" aria-selected="false">มอบหมายงาน</button>
-      <button class="tab" role="tab" data-tab="review" aria-selected="false">ตรวจงาน</button>
-      <button class="tab" role="tab" data-tab="report" aria-selected="false">คะแนนและรายงาน</button>
-      <button class="tab" role="tab" data-tab="settings" aria-selected="false">นักเรียนและตั้งค่า</button>
+      <button class="tab" role="tab" data-tab="timetable" aria-selected="true" title="ตารางสอนและสร้าง QR"><i data-ic="calendar"></i><span>ตารางสอน</span></button>
+      <button class="tab" role="tab" data-tab="checkin" aria-selected="false" title="เช็กชื่อสด"><i data-ic="userCheck"></i><span>เช็กชื่อสด</span></button>
+      <button class="tab" role="tab" data-tab="assign" aria-selected="false" title="มอบหมายงาน"><i data-ic="assign"></i><span>มอบหมาย</span></button>
+      <button class="tab" role="tab" data-tab="review" aria-selected="false" title="ตรวจงาน"><i data-ic="review"></i><span>ตรวจงาน</span></button>
+      <button class="tab" role="tab" data-tab="report" aria-selected="false" title="คะแนนและรายงาน"><i data-ic="chart"></i><span>คะแนน</span></button>
+      <button class="tab" role="tab" data-tab="settings" aria-selected="false" title="นักเรียนและตั้งค่า"><i data-ic="settings"></i><span>ตั้งค่า</span></button>
     </div>
     <div id="p-timetable" role="tabpanel"></div>
     <div id="p-checkin" role="tabpanel" class="hidden"></div>

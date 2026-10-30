@@ -56,13 +56,13 @@
     const room = ensureRoom();
     el.innerHTML = `
       <div class="card">
-        <div class="row"><div class="grow"><h2 style="margin:0">เปิดคาบเช็กชื่อ</h2>
+        <div class="row"><div class="grow"><h2 style="margin:0">${icon('userCheck')}เปิดคาบเช็กชื่อ</h2>
           <div class="small muted">กดที่ช่องวิชาในตาราง แล้วเลือกวันที่ → สร้าง QR ส่งให้นักเรียน (หรือเปิดฉายหน้าจอ)</div></div>
-          <button class="btn" id="tt-adhoc" type="button">QR นอกตาราง</button></div>
+          <button class="btn" id="tt-adhoc" type="button">${icon('qr')}QR นอกตาราง</button></div>
         <div id="tt-grid">${ttGrid(false)}</div>
       </div>
       <div id="ck-live"></div>
-      <div class="card"><div class="row"><h3 class="grow" style="margin:0">คาบที่ผ่านมา</h3>
+      <div class="card"><div class="row"><h3 class="grow" style="margin:0">${icon('clock')}คาบที่ผ่านมา</h3>
         <label class="field" style="margin:0">ห้อง<select id="ck-room">${roomOptions(room)}</select></label></div>
         <div id="ck-past" class="muted" style="margin-top:8px">กำลังโหลด…</div></div>`;
     bindGrid(el);
@@ -96,7 +96,7 @@
       ${open ? `<div class="card">
         <div class="qrbox" id="qrbox"><div id="qr" role="img" aria-label="QR Code เช็กชื่อ"></div>
           <div class="count" id="qrcount"></div>${rot ? '<div class="countdown" id="cd"></div>' : ''}</div>
-        <div class="row" style="margin-top:12px">${rot ? '' : '<button class="btn primary grow" id="qr-img" type="button">ส่งรูป QR ให้นักเรียน</button>'}<button class="btn grow" id="fs" type="button">แสดงเต็มจอ</button><button class="btn danger grow" id="close" type="button">ปิดคาบ (บันทึกขาด)</button></div>
+        <div class="row" style="margin-top:12px">${rot ? '' : '<button class="btn primary grow" id="qr-img" type="button">' + icon('send') + 'ส่งรูป QR ให้นักเรียน</button>'}<button class="btn grow" id="fs" type="button">${icon('expand')}แสดงเต็มจอ</button><button class="btn danger grow" id="close" type="button">${icon('lock')}ปิดคาบ (บันทึกขาด)</button></div>
         <p class="small muted" style="margin-top:8px">${rot ? 'QR เปลี่ยนรหัสอัตโนมัติ (คาบแบบเก่า) ' : 'QR 1 อัน ต่อ 1 คาบ ไม่เปลี่ยนรหัส ' + (st.session.app ? '· นักเรียนกดเช็กชื่อในแอปได้ด้วย ' : '')}· รับเช็กชื่อถึง ${esc(thTime(st.session.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(st.session.onTimeUntil))} น.</p></div>` : ''}
       <div class="card" id="roster"></div></div>`;
     drawRoster(st);
@@ -123,7 +123,7 @@
     live.lastKey = key;
     const r = $('#roster'); if (!r) return;
     const sid = st.session.sessionId;
-    r.innerHTML = `<h3>${esc(roomLabel(st.session.room))} · ${esc(thDate(st.session.date))}${st.session.subject ? ' · ' + esc(st.session.subject) : ''}</h3>
+    r.innerHTML = `<h3>${icon('users')}${esc(roomLabel(st.session.room))} · ${esc(thDate(st.session.date))}${st.session.subject ? ' · ' + esc(st.session.subject) : ''}</h3>
       <p class="row">${badge('present', 'มา ' + c.present)}${badge('late', 'สาย ' + c.late)}${badge('leave', 'ลา ' + c.leave)}${badge('absent', 'ขาด ' + c.absent)}${c.none ? badge('none', 'ยังไม่เช็ก ' + c.none) : ''}</p>
       <div class="scroll"><table><thead><tr><th>ชื่อ</th><th>เวลา</th><th>สถานะ</th></tr></thead><tbody>${st.students.map((s) => `<tr>
         <td>${esc(s.name)}<div class="small muted">${esc(s.id)}${s.flag ? ' · <span style="color:var(--bad)">⚠ ' + esc(s.flag) + '</span>' : ''}</div></td>
@@ -200,11 +200,11 @@
       gridSess = (await T('t_sessions', {})).sessions;
     } catch (e) { fail(e); return; }
     el.innerHTML = `
-      <div class="card"><div class="row"><div class="grow"><h2 style="margin:0">ตารางสอน</h2>
+      <div class="card"><div class="row"><div class="grow"><h2 style="margin:0">${icon('calendar')}ตารางสอน</h2>
         <div class="small muted" id="tt-hint"></div></div>
-        <button class="btn" id="tt-adhoc" type="button">QR นอกตาราง</button>
+        <button class="btn" id="tt-adhoc" type="button">${icon('qr')}QR นอกตาราง</button>
         <button class="btn" id="tt-edit" type="button"></button>
-        <button class="btn" id="tt-periods" type="button">ตั้งเวลาคาบ</button></div>
+        <button class="btn" id="tt-periods" type="button">${icon('clock')}ตั้งเวลาคาบ</button></div>
         <div id="tt-grid"></div></div>`;
     $('#tt-adhoc').addEventListener('click', () => openQrDialog(null));
     $('#tt-periods').addEventListener('click', openPeriodsDialog);
@@ -214,7 +214,7 @@
 
   function paintTimetable() {
     const dow = dowOf(todayStr());
-    $('#tt-edit').textContent = ttEdit ? '✓ เสร็จสิ้นการแก้ไข' : '✎ แก้ไขตาราง';
+    $('#tt-edit').innerHTML = ttEdit ? icon('check') + 'เสร็จสิ้นการแก้ไข' : icon('edit') + 'แก้ไขตาราง';
     $('#tt-edit').classList.toggle('primary', ttEdit);
     $('#tt-hint').innerHTML = ttEdit
       ? 'โหมดแก้ไข: กดช่องวิชาเพื่อแก้/ลบ · กดช่องว่าง (+) เพื่อเพิ่มคาบ'
@@ -276,7 +276,7 @@
     const start = slot ? slotStart(slot) : nowHM();
     const date0 = slot ? nextDateFor(slot.day) : todayStr();
     const close = openModal(`
-      <h2>${slot ? 'สร้าง QR เช็กชื่อ' : 'สร้าง QR นอกตารางสอน'}</h2>
+      <h2>${icon('qr')}${slot ? 'สร้าง QR เช็กชื่อ' : 'สร้าง QR นอกตารางสอน'}</h2>
       ${slot ? `<p class="muted small">${esc(slot.subject)} ${esc(classText(slot.classLabel))} · วัน${DAYS[slot.day]} ${esc(slotLabel(slot))}</p>` : ''}
       <form id="qd">
         <div class="grid cols-2">
@@ -289,7 +289,7 @@
           <label class="field" style="grid-column:1/-1;flex-direction:row;display:flex;gap:10px;align-items:flex-start"><input id="qd-app" type="checkbox" checked style="width:22px;height:22px;margin-top:2px;flex:none"><span>ให้นักเรียนกด "เช็กชื่อ" ในแอปได้ด้วย (ไม่ต้องสแกน)<span class="hint" style="display:block">ถ้าไม่ติ๊ก นักเรียนต้องสแกน QR จากรูปที่ส่งไปเท่านั้น</span></span></label>
         </div>
         <p class="small muted" id="qd-hint">ได้ QR 1 อัน ต่อ 1 คาบ ไม่เปลี่ยนรหัส บันทึกรูปแล้วส่งใน LINE กลุ่มห้องได้เลย ใช้ได้จนหมดเวลารับเช็กชื่อ ${loginMode === 'pin' ? 'ระบบยังป้องกันด้วย PIN ของนักเรียนแต่ละคน และ ' : 'ระบบป้องกันด้วย '}1 เครื่อง = 1 คน (ติดธงถ้าซ้ำ)</p>
-        <div class="row end"><button class="btn" type="button" id="qd-cancel">ยกเลิก</button><button class="btn primary" type="submit">สร้าง QR</button></div>
+        <div class="row end"><button class="btn" type="button" id="qd-cancel">ยกเลิก</button><button class="btn primary" type="submit">${icon('qr')}สร้าง QR</button></div>
       </form>`);
     $('#qd-cancel').addEventListener('click', close);
     const dateHint = () => {
@@ -335,14 +335,14 @@
     const file = new File([blob], fname, { type: 'image/png' });
     const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
     const close = openModal(`
-      <div class="row"><h2 class="grow" style="margin:0">QR พร้อมส่งให้นักเรียน</h2><button class="btn sm" id="qr-x" type="button">ปิด</button></div>
+      <div class="row"><h2 class="grow" style="margin:0">${icon('checkCircle')}QR พร้อมส่งให้นักเรียน</h2><button class="btn sm" id="qr-x" type="button">${icon('x')}ปิด</button></div>
       <p class="small muted">บันทึกรูปนี้แล้วส่งใน LINE กลุ่มห้อง ใช้สแกนได้${s.date !== todayStr() ? ` ในวันที่ ${esc(thDate(s.date))}` : ''} ถึง ${esc(thTime(s.closeAt))} น. (ตรงเวลาถึง ${esc(thTime(s.onTimeUntil))} น.)</p>
       <img src="${URL.createObjectURL(blob)}" alt="QR Code เช็กชื่อ ${esc(s.subject)}" style="width:100%;max-width:440px;display:block;margin:0 auto 12px;border:1px solid var(--line);border-radius:12px">
       <div class="row">
-        <button class="btn primary grow" id="qr-save" type="button">⬇ บันทึกรูป</button>
-        ${canShare ? '<button class="btn grow" id="qr-share" type="button">↗ แชร์รูป (LINE ฯลฯ)</button>' : ''}
-        <button class="btn grow" id="qr-copy" type="button">คัดลอกลิงก์</button>
-        <button class="btn grow" id="qr-open" type="button">ดูรายชื่อ / ปิดคาบ</button></div>`);
+        <button class="btn primary grow" id="qr-save" type="button">${icon('download')} บันทึกรูป</button>
+        ${canShare ? '<button class="btn grow" id="qr-share" type="button">' + icon('share') + ' แชร์รูป (LINE ฯลฯ)</button>' : ''}
+        <button class="btn grow" id="qr-copy" type="button">${icon('link')}คัดลอกลิงก์</button>
+        <button class="btn grow" id="qr-open" type="button">${icon('users')}ดูรายชื่อ / ปิดคาบ</button></div>`);
     $('#qr-x').addEventListener('click', close);
     $('#qr-save').addEventListener('click', () => {
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: fname });
@@ -400,7 +400,7 @@
     const roomOpts = ['<option value="">— ไม่ใช่คาบสอนห้องเรียน (ประชุม/กิจกรรม) —</option>']
       .concat(rooms.map((r) => `<option value="${esc(r.room)}" ${r.room === s.room ? 'selected' : ''}>${esc(r.label)} (${r.count} คน)</option>`))
       .concat(s.room && !rooms.some((r) => r.room === s.room) ? [`<option value="${esc(s.room)}" selected>${esc(s.room)} (ยังไม่มีรายชื่อ ต้องนำเข้าก่อนสร้าง QR)</option>`] : []).join('');
-    const close = openModal(`<h2>${i === null ? 'เพิ่มคาบสอน' : 'แก้ไขคาบสอน'}</h2>
+    const close = openModal(`<h2>${icon('calendar')}${i === null ? 'เพิ่มคาบสอน' : 'แก้ไขคาบสอน'}</h2>
       <form id="sd"><div class="grid cols-2">
         <label class="field">วัน<select id="sd-day">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<option value="${d}" ${d === s.day ? 'selected' : ''}>${DAYS[d]}</option>`).join('')}</select></label>
         <label class="field">วิชา / กิจกรรม<input id="sd-subject" type="text" maxlength="60" value="${esc(s.subject)}" required></label>
@@ -410,7 +410,7 @@
         <label class="field">ใช้รายชื่อห้องไหนในระบบ<select id="sd-room">${roomOpts}</select></label>
         <label class="field">ห้องเรียน/สถานที่<input id="sd-place" type="text" maxlength="30" value="${esc(s.place)}" placeholder="เช่น 316"></label>
         <label class="field">หมายเหตุ<input id="sd-note" type="text" maxlength="60" value="${esc(s.note)}"></label></div>
-        <div class="row end">${i !== null ? '<button class="btn danger" type="button" id="sd-del">ลบคาบนี้</button>' : ''}<span class="grow"></span><button class="btn" type="button" id="sd-cancel">ยกเลิก</button><button class="btn primary" type="submit">บันทึก</button></div></form>`);
+        <div class="row end">${i !== null ? `<button class="btn danger" type="button" id="sd-del">${icon('trash')}ลบคาบนี้</button>` : ''}<span class="grow"></span><button class="btn" type="button" id="sd-cancel">ยกเลิก</button><button class="btn primary" type="submit">${icon('check')}บันทึก</button></div></form>`);
     $('#sd-cancel').addEventListener('click', close);
     const delBtn = $('#sd-del');
     if (delBtn) delBtn.addEventListener('click', async () => {
@@ -429,10 +429,10 @@
   }
 
   function openPeriodsDialog() {
-    const close = openModal(`<h2>เวลาแต่ละคาบ</h2><p class="muted small">แก้เวลาให้ตรงกับโรงเรียน คาบที่สร้าง QR จะใช้เวลาเหล่านี้</p>
+    const close = openModal(`<h2>${icon('clock')}เวลาแต่ละคาบ</h2><p class="muted small">แก้เวลาให้ตรงกับโรงเรียน คาบที่สร้าง QR จะใช้เวลาเหล่านี้</p>
       <form id="pd"><div class="scroll" style="max-height:55vh"><table><thead><tr><th>คาบ</th><th>เริ่ม</th><th>เลิก</th></tr></thead><tbody>
       ${tb.periods.map((p) => `<tr><td>${p.period}</td><td><input type="time" data-p="${p.period}" data-k="start" value="${esc(p.start)}" required></td><td><input type="time" data-p="${p.period}" data-k="end" value="${esc(p.end)}" required></td></tr>`).join('')}
-      </tbody></table></div><div class="row end" style="margin-top:12px"><button class="btn" type="button" id="pd-cancel">ยกเลิก</button><button class="btn primary" type="submit">บันทึก</button></div></form>`);
+      </tbody></table></div><div class="row end" style="margin-top:12px"><button class="btn" type="button" id="pd-cancel">ยกเลิก</button><button class="btn primary" type="submit">${icon('check')}บันทึก</button></div></form>`);
     $('#pd-cancel').addEventListener('click', close);
     $('#pd').addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -445,7 +445,7 @@
   async function renderAssign() {
     const el = $('#p-assign'), room = ensureRoom();
     el.innerHTML = `
-      <div class="card"><h2>มอบหมายงานใหม่</h2>
+      <div class="card"><h2>${icon('assign')}มอบหมายงานใหม่</h2>
         <form id="as-form"><div class="grid cols-2">
           <label class="field">ห้อง<select id="as-room">${roomOptions(room)}</select></label>
           <label class="field">ชื่องาน<input id="as-title" type="text" maxlength="80" required placeholder="เช่น ใบงานที่ 1 สมการ"></label>
@@ -454,8 +454,8 @@
           <label class="field">วิชา<input id="as-subject" type="text" maxlength="60" list="as-subjects" placeholder="เช่น คณิตศาสตร์"><datalist id="as-subjects"></datalist></label>
           <label class="field">ชั้นเรียน (ขึ้นบนใบหลักฐาน)<input id="as-class" type="text" maxlength="20" placeholder="เช่น ม.4/2"></label>
           <label class="field" style="grid-column:1/-1">รายละเอียดใบงาน (นักเรียนเห็น และขึ้นบนใบหลักฐาน)<textarea id="as-desc" maxlength="600" placeholder="เช่น จงแก้สมการเชิงเส้นตัวแปรเดียว พร้อมแสดงวิธีทำอย่างละเอียด จำนวน 10 ข้อ"></textarea></label>
-        </div><button class="btn primary" type="submit">สร้างงาน</button></form></div>
-      <div class="card"><h2>งานทั้งหมด</h2><div id="as-list" class="muted">กำลังโหลด…</div></div>`;
+        </div><button class="btn primary" type="submit">${icon('plus')}สร้างงาน</button></form></div>
+      <div class="card"><h2>${icon('book')}งานทั้งหมด</h2><div id="as-list" class="muted">กำลังโหลด…</div></div>`;
     const fillDefaults = async () => {
       try { if (!tb) tb = await T('t_timetable', {}); } catch (e) { return; }
       const rm = $('#as-room').value, slots = tb.slots.filter((x) => x.room === rm);
@@ -485,7 +485,7 @@
         <div class="grow"><b>${esc(a.title)}</b> <span class="muted small">· ${esc(roomLabel(a.room))} · เต็ม ${fmtNum(a.maxScore)}${a.due ? ' · ส่งภายใน ' + esc(thDateTime(a.due)) : ''}</span>
           <div class="small">ส่งแล้ว ${a.submitted}/${a.total} · รอตรวจ ${a.pending} ${a.status === 'closed' ? badge('none', 'ปิดรับแล้ว') : ''}</div></div>
         <button class="btn sm" data-link="${esc(a.assignmentId)}" type="button">คัดลอกลิงก์ส่งงาน</button>
-        <button class="btn sm primary" data-review="${esc(a.assignmentId)}" data-room="${esc(a.room)}" type="button">ตรวจงาน</button>
+        <button class="btn sm primary" data-review="${esc(a.assignmentId)}" data-room="${esc(a.room)}" type="button">${icon('review')}ตรวจงาน</button>
         <button class="btn sm" data-toggle="${esc(a.assignmentId)}" data-to="${a.status === 'open' ? 'closed' : 'open'}" type="button">${a.status === 'open' ? 'ปิดรับ' : 'เปิดรับอีกครั้ง'}</button></div>`).join('') : 'ยังไม่มีงาน';
       $$('[data-link]', box).forEach((b) => b.addEventListener('click', async () => {
         const url = `${siteBase()}student.html?a=${encodeURIComponent(b.dataset.link)}`;
@@ -502,7 +502,7 @@
 
   async function renderReview() {
     const el = $('#p-review'), room = ensureRoom();
-    el.innerHTML = `<div class="card"><h2>ตรวจงาน</h2><div class="row">
+    el.innerHTML = `<div class="card"><h2>${icon('review')}ตรวจงาน</h2><div class="row">
       <label class="field grow" style="margin:0">ห้อง<select id="rv-room">${roomOptions(room)}</select></label>
       <label class="field grow" style="margin:0">งาน<select id="rv-asg"><option>กำลังโหลด…</option></select></label></div></div>
       <div id="rv-body"></div>`;
@@ -592,10 +592,10 @@
       <div id="vw-imgs" class="grid">${s.files.map((f, i) => `<div><div class="small muted">รูปที่ ${i + 1}${f.round > 1 ? ' (รอบ ' + f.round + ')' : ''}</div><img class="muted" alt="งานของ ${esc(s.name)} รูปที่ ${i + 1}" data-f="${esc(f.id)}" style="min-height:80px"></div>`).join('')}</div>
       <div class="gradebar"><label class="field" style="margin:0">ข้อความถึงนักเรียน (ไม่บังคับ)<input id="vw-comment" type="text" maxlength="300" value="${esc(s.comment)}" placeholder="เช่น ข้อ 3 ลืมใส่หน่วย"></label>
       <div class="row">
-        <button class="btn ok grow" data-g="done" type="button">✔ ครบถ้วน (${fmtNum(a.maxScore)}) [1]</button>
-        <button class="btn grow" data-g="revise" type="button">✎ ต้องแก้ไข [2]</button>
-        <button class="btn danger grow" data-g="none" type="button">✖ ไม่ผ่าน (0) [3]</button></div>
-      <div class="row end"><button class="btn sm" id="vw-prev" type="button" ${rv.i === 0 ? 'disabled' : ''}>← ก่อนหน้า</button><button class="btn sm" id="vw-next" type="button" ${rv.i === rv.queue.length - 1 ? 'disabled' : ''}>ถัดไป →</button></div></div>
+        <button class="btn ok grow" data-g="done" type="button">${icon('check')} ครบถ้วน (${fmtNum(a.maxScore)}) [1]</button>
+        <button class="btn grow" data-g="revise" type="button">${icon('edit')} ต้องแก้ไข [2]</button>
+        <button class="btn danger grow" data-g="none" type="button">${icon('x')} ไม่ผ่าน (0) [3]</button></div>
+      <div class="row end"><button class="btn sm" id="vw-prev" type="button" ${rv.i === 0 ? 'disabled' : ''}>${icon('back')} ก่อนหน้า</button><button class="btn sm" id="vw-next" type="button" ${rv.i === rv.queue.length - 1 ? 'disabled' : ''}>ถัดไป ${icon('next')}</button></div></div>
     </div></div>`;
     $$('#vw-imgs img').forEach((img) => { loadImg(img, img.dataset.f); img.addEventListener('click', () => img.style.maxHeight = img.style.maxHeight === 'none' ? '' : 'none'); });
     $('#vw-close').addEventListener('click', closeViewer);
@@ -619,9 +619,9 @@
   // ═════════════ คะแนนและรายงาน ═════════════
   async function renderReport() {
     const el = $('#p-report'), room = ensureRoom();
-    el.innerHTML = `<div class="card"><div class="row"><h2 class="grow" style="margin:0">คะแนนและรายงาน</h2>
+    el.innerHTML = `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${icon('chart')}คะแนนและรายงาน</h2>
       <select id="rp-room" style="width:auto">${roomOptions(room)}</select>
-      <button class="btn sm" id="rp-csv" type="button">ดาวน์โหลด CSV (Excel)</button><button class="btn sm" id="rp-print" type="button">พิมพ์</button></div></div><div id="rp-body"><div class="card muted">กำลังโหลด…</div></div>`;
+      <button class="btn sm" id="rp-csv" type="button">${icon('download')}ดาวน์โหลด CSV (Excel)</button><button class="btn sm" id="rp-print" type="button">${icon('file')}พิมพ์</button></div></div><div id="rp-body"><div class="card muted">กำลังโหลด…</div></div>`;
     $('#rp-room').addEventListener('change', (e) => { setRoom(e.target.value); renderReport(); });
     $('#rp-print').addEventListener('click', () => window.print());
     let r;
@@ -651,13 +651,13 @@
   async function renderSettings() {
     const el = $('#p-settings');
     el.innerHTML = `
-      <div class="card"><h2>นำเข้ารายชื่อนักเรียน</h2>
+      <div class="card"><h2>${icon('upload')}นำเข้ารายชื่อนักเรียน</h2>
         <p class="small muted">คัดลอกจาก Excel (3 คอลัมน์: เลขประจำตัว, ชื่อ-นามสกุล, ห้อง) แล้ววางได้เลย นำเข้าซ้ำได้ ระบบไม่ลบ PIN เดิม</p>
         <textarea id="im-text" placeholder="12345&#9;นายตัวอย่าง ทดสอบ&#9;1"></textarea>
-        <div class="row" style="margin-top:10px"><button class="btn primary" id="im-go" type="button">นำเข้า</button></div></div>
-      <div class="card"><div class="row"><h2 class="grow" style="margin:0">รายชื่อนักเรียน</h2><select id="st-room" style="width:auto">${roomOptions(ensureRoom())}</select></div><div id="st-list" class="muted" style="margin-top:10px">กำลังโหลด…</div></div>
-      <div class="card"><h2>เกณฑ์คะแนนและตั้งค่า</h2><div id="cf-form" class="muted">กำลังโหลด…</div></div>
-      <div class="card"><h2>เปลี่ยนรหัสผ่านครู</h2><form id="pw-form" class="row"><input id="pw-new" type="password" minlength="6" placeholder="รหัสใหม่ อย่างน้อย 6 ตัว" class="grow" autocomplete="new-password" required><button class="btn primary" type="submit">เปลี่ยนรหัส</button></form></div>`;
+        <div class="row" style="margin-top:10px"><button class="btn primary" id="im-go" type="button">${icon('upload')}นำเข้า</button></div></div>
+      <div class="card"><div class="row"><h2 class="grow" style="margin:0">${icon('users')}รายชื่อนักเรียน</h2><select id="st-room" style="width:auto">${roomOptions(ensureRoom())}</select></div><div id="st-list" class="muted" style="margin-top:10px">กำลังโหลด…</div></div>
+      <div class="card"><h2>${icon('settings')}เกณฑ์คะแนนและตั้งค่า</h2><div id="cf-form" class="muted">กำลังโหลด…</div></div>
+      <div class="card"><h2>${icon('lock')}เปลี่ยนรหัสผ่านครู</h2><form id="pw-form" class="row"><input id="pw-new" type="password" minlength="6" placeholder="รหัสใหม่ อย่างน้อย 6 ตัว" class="grow" autocomplete="new-password" required><button class="btn primary" type="submit">${icon('lock')}เปลี่ยนรหัส</button></form></div>`;
     $('#im-go').addEventListener('click', (e) => busy(e.currentTarget, async () => {
       try {
         const r = await T('t_importStudents', { text: $('#im-text').value });

@@ -14,7 +14,7 @@
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <a class="brand" href="./"><img class="logo" src="img/logo.webp" alt="" width="36" height="36"><span>NK EduTrack · ตรวจสอบใบหลักฐาน</span></a>
+  <a class="brand" href="./"><img class="logo" src="img/logo.webp" alt="" width="40" height="40"><span class="bt"><b>NK EduTrack</b><small>ตรวจสอบใบหลักฐานการส่งงาน · โรงเรียนมัธยมวัดหนองแขม</small></span></a>
 </div></header>
 <main class="narrow">
   <div class="card" id="box"><p class="center muted">กำลังตรวจสอบ…</p></div>
@@ -27,7 +27,7 @@
   try {
     const r = await api('verify', { id: p.get('r') || '', k: p.get('k') || '' });
     box.innerHTML = `
-      <div class="result ${r.late ? 'warn' : 'ok'}" role="status"><div class="big" aria-hidden="true">${r.late ? '⏰' : '✅'}</div>
+      <div class="result ${r.late ? 'warn' : 'ok'}" role="status"><div class="big" aria-hidden="true">${icon(r.late ? 'clock' : 'shield')}</div>
         <h2>ระบบรับงานนี้แล้ว${r.late ? ' (ส่งช้ากว่ากำหนด)' : ''}</h2><p>เลขที่ใบหลักฐาน ${esc(r.receiptId)}</p></div>
       <table style="margin-top:12px"><tbody>
         <tr><th>ใบงาน</th><td>${esc(r.title)}${r.subject ? '<div class="small muted">' + esc(r.subject) + (r.classLabel ? ' · ' + esc(r.classLabel) : '') + '</div>' : ''}</td></tr>
@@ -36,7 +36,7 @@
         <tr><th>จำนวนภาพ</th><td>${r.count} ภาพ · ส่งครั้งที่ ${r.round}</td></tr></tbody></table>
       <p class="small muted" style="margin-top:12px">หน้านี้ยืนยันเฉพาะว่าระบบได้รับไฟล์ ไม่ใช่การรับรองคะแนนหรือความถูกต้องของงาน</p>`;
   } catch (e) {
-    box.innerHTML = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">❌</div><h2>ตรวจสอบไม่ผ่าน</h2><p>${esc(e.message || 'เกิดข้อผิดพลาด')}</p></div>`;
+    box.innerHTML = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">${icon('xCircle')}</div><h2>ตรวจสอบไม่ผ่าน</h2><p>${esc(e.message || 'เกิดข้อผิดพลาด')}</p></div>`;
   }
 })();
 </script>

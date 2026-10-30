@@ -21,10 +21,10 @@
 <body>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="./"><img class="logo" src="img/logo.webp" alt="" width="36" height="36"><span>NK EduTrack</span></a>
+    <a class="brand" href="./"><img class="logo" src="img/logo.webp" alt="" width="40" height="40"><span class="bt"><b>NK EduTrack</b><small>ระบบสำหรับนักเรียน · โรงเรียนมัธยมวัดหนองแขม</small></span></a>
     <div class="who hidden" id="who"></div>
-    <button class="btn sm hidden" id="install-app" type="button">📲 ติดตั้งแอป</button>
-    <button class="btn sm hidden" id="logout" type="button">ออก</button>
+    <button class="btn sm hidden" id="install-app" type="button" aria-label="ติดตั้งแอป"><i data-ic="phone"></i><span class="lbl">ติดตั้งแอป</span></button>
+    <button class="btn sm hidden" id="logout" type="button" aria-label="ออกจากระบบ"><i data-ic="logout"></i><span class="lbl">ออก</span></button>
   </div>
 </header>
 
@@ -32,8 +32,7 @@
   <!-- เข้าสู่ระบบ -->
   <section id="view-login" class="narrow hidden">
     <div class="card">
-      <h1>เข้าสู่ระบบ</h1>
-      <p class="muted" id="login-note">ใส่เลขประจำตัวนักเรียนของคุณ</p>
+      <div class="pagehead" style="margin-bottom:12px"><span class="tile"><i data-ic="school"></i></span><div><h1 style="margin:0">เข้าสู่ระบบ</h1><div class="small muted" id="login-note">ใส่เลขประจำตัวนักเรียนของคุณ</div></div></div>
       <form id="login-form" autocomplete="off">
         <label class="field">เลขประจำตัวนักเรียน
           <input id="login-id" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="12" required>
@@ -42,7 +41,7 @@
           <input id="login-pin" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off">
           <span class="hint">ถ้ายังไม่เคยใช้ ให้เว้นว่างไว้ แล้วกด "เข้าสู่ระบบ" เพื่อตั้ง PIN</span>
         </label>
-        <button class="btn primary block" type="submit">เข้าสู่ระบบ</button>
+        <button class="btn primary block" type="submit"><i data-ic="logout"></i>เข้าสู่ระบบ</button>
       </form>
     </div>
   </section>
@@ -75,9 +74,9 @@
 </main>
 
 <nav class="bottomnav hidden" id="nav" aria-label="เมนูหลัก" role="tablist">
-  <button type="button" role="tab" data-tab="checkin" aria-selected="true">เช็กชื่อ</button>
-  <button type="button" role="tab" data-tab="submit" aria-selected="false">ส่งงาน</button>
-  <button type="button" role="tab" data-tab="me" aria-selected="false">ผลของฉัน</button>
+  <button type="button" role="tab" data-tab="checkin" aria-selected="true"><i data-ic="userCheck"></i>เช็กชื่อ</button>
+  <button type="button" role="tab" data-tab="submit" aria-selected="false"><i data-ic="upload"></i>ส่งงาน</button>
+  <button type="button" role="tab" data-tab="me" aria-selected="false"><i data-ic="chart"></i>ผลของฉัน</button>
 </nav>
 
 <script src="config.js"></script>

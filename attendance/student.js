@@ -136,11 +136,11 @@
       if (r.ok) {
         const late = r.status === 'late';
         top = `<div class="result ${late ? 'warn' : 'ok'}" role="status">
-          <div class="big" aria-hidden="true">${late ? '⏰' : '✅'}</div>
+          <div class="big" aria-hidden="true">${icon(late ? 'clock' : 'checkCircle')}</div>
           <h2>${r.already ? 'เช็กชื่อไว้แล้ว' : 'เช็กชื่อสำเร็จ'}</h2>
           <p>${late ? 'มาสาย' : 'มาเรียนตรงเวลา'} · ${esc(thTime(r.time))} น.${r.subject ? '<br>' + esc(r.subject) : ''}</p></div>`;
       } else {
-        top = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">⚠️</div><h2>เช็กชื่อไม่สำเร็จ</h2><p>${esc(r.message)}</p></div>`;
+        top = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">${icon('alert')}</div><h2>เช็กชื่อไม่สำเร็จ</h2><p>${esc(r.message)}</p></div>`;
       }
     }
     const list = me ? (me.openSessions || []) : [];
@@ -149,15 +149,15 @@
       const what = `${x.subject ? esc(x.subject) : 'คาบเรียน'}${x.classLabel ? ' · ' + esc(x.classLabel) : ''}`;
       const until = `รับเช็กชื่อถึง ${esc(thTime(x.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(x.onTimeUntil))} น.`;
       if (x.checked) return `<div class="card"><div class="row"><div class="grow"><h3>${what}</h3><div class="small muted">${esc(x.label)}</div></div>${badge(x.checked)}</div><p class="small muted" style="margin:8px 0 0">เช็กชื่อเรียบร้อยแล้ว</p></div>`;
-      if (x.app) return `<div class="card"><h2>เช็กชื่อเข้าเรียน</h2><p style="margin-bottom:4px"><b>${what}</b></p><p class="small muted">${until}</p>
-        <button class="btn primary block" data-ci="${esc(x.sessionId)}" type="button" style="font-size:1.15rem;min-height:56px">✋ เช็กชื่อ</button></div>`;
+      if (x.app) return `<div class="card"><h2>${icon('userCheck')}เช็กชื่อเข้าเรียน</h2><p style="margin-bottom:4px"><b>${what}</b></p><p class="small muted">${until}</p>
+        <button class="btn primary block" data-ci="${esc(x.sessionId)}" type="button" style="font-size:1.15rem;min-height:56px">${icon('userCheck')} เช็กชื่อ</button></div>`;
       return `<div class="card"><h3>${what}</h3><p class="small">คาบนี้ให้เช็กชื่อด้วยการ <b>สแกน QR</b> ที่ครูส่งให้หรือที่หน้าห้อง</p><p class="small muted">${until}</p></div>`;
     }).join('');
     el.innerHTML = `
       ${top}
-      ${sessCards || '<div class="card"><h2>เช็กชื่อ</h2><p class="muted">ขณะนี้ยังไม่มีคาบที่เปิดเช็กชื่อ รอครูเปิดคาบ แล้วจะมีปุ่มเช็กชื่อขึ้นที่นี่ (หรือสแกน QR ที่ครูส่งให้)</p></div>'}
+      ${sessCards || `<div class="card"><h2>${icon('userCheck')}เช็กชื่อ</h2><p class="muted">ขณะนี้ยังไม่มีคาบที่เปิดเช็กชื่อ รอครูเปิดคาบ แล้วจะมีปุ่มเช็กชื่อขึ้นที่นี่ (หรือสแกน QR ที่ครูส่งให้)</p></div>`}
       <div class="card">
-        <h3>วิธีเช็กชื่อ</h3>
+        <h3>${icon('info')}วิธีเช็กชื่อ</h3>
         <ol class="small" style="margin:0;padding-left:20px">
           <li>กดปุ่ม <b>เช็กชื่อ</b> ด้านบน (เมื่อครูเปิดคาบ)</li>
           <li>หรือสแกน QR ที่ครูส่งให้ / ที่หน้าห้อง แล้วเข้าสู่ระบบ ระบบจะเช็กชื่อให้อัตโนมัติ</li>
@@ -190,8 +190,8 @@
     const el = $('#tab-submit');
     if (activeAsg) return renderSubmitForm(el);
     const list = me ? me.assignments : [];
-    if (!list.length) { el.innerHTML = '<div class="card center muted">ยังไม่มีงานที่ครูมอบหมาย</div>'; return; }
-    el.innerHTML = `<h2 style="margin-top:16px">งานของฉัน</h2>` + list.map((a) => {
+    if (!list.length) { el.innerHTML = `<div class="card center muted">${icon('book')} ยังไม่มีงานที่ครูมอบหมาย</div>`; return; }
+    el.innerHTML = `<h2 style="margin-top:16px">${icon('book')}งานของฉัน</h2>` + list.map((a) => {
       const m = a.mine, st = m ? m.status : (a.status === 'open' ? 'missing' : 'missing');
       const score = m && m.score !== null ? ` · ${fmtNum(m.score)}/${fmtNum(a.maxScore)}` : '';
       return `<div class="card"><div class="row"><div class="grow"><h3>${esc(a.title)}</h3>
@@ -200,7 +200,7 @@
         ${m ? `<p class="small" style="margin-top:8px">ส่งแล้ว ${m.count} รูป · รอบที่ ${m.round}${score}${m.late ? ' · ส่งช้า' : ''}</p>` : ''}
         ${a.description ? `<p class="small" style="white-space:pre-wrap;margin-top:8px">${esc(a.description)}</p>` : ''}
         ${m && m.comment ? `<p class="small"><b>ครูเขียนว่า:</b> ${esc(m.comment)}</p>` : ''}
-        ${a.receipts && a.receipts.length ? `<div class="row" style="margin:8px 0">${a.receipts.map((r) => `<button class="btn sm" data-rc="${esc(r.receiptId)}" type="button">📄 ใบหลักฐาน ครั้งที่ ${r.round}</button>`).join('')}</div>` : ''}
+        ${a.receipts && a.receipts.length ? `<div class="row" style="margin:8px 0">${a.receipts.map((r) => `<button class="btn sm" data-rc="${esc(r.receiptId)}" type="button">${icon('file')} ใบหลักฐาน ครั้งที่ ${r.round}</button>`).join('')}</div>` : ''}
         ${a.status === 'open' && !(m && m.status === 'done')
           ? `<button class="btn primary block" data-asg="${esc(a.assignmentId)}" type="button">${m ? (m.status === 'revise' ? 'ส่งงานที่แก้ไขแล้ว' : 'ส่งเพิ่ม/ส่งใหม่') : 'ส่งงานนี้'}</button>` : ''}
       </div>`;
@@ -213,22 +213,22 @@
     const a = activeAsg;
     el.innerHTML = `
       <div class="card">
-        <button class="btn sm" type="button" id="sub-back">← กลับ</button>
+        <button class="btn sm" type="button" id="sub-back">${icon('back')} กลับ</button>
         <h2 style="margin-top:12px">${esc(a.title)}</h2>
         ${a.subject ? `<div class="small muted">${esc(a.subject)}${a.classLabel ? ' · ' + esc(a.classLabel) : ''}</div>` : ''}
         ${a.description ? `<p style="white-space:pre-wrap;margin-top:8px">${esc(a.description)}</p>` : ''}
         <p class="small muted">คะแนนเต็ม ${fmtNum(a.maxScore)}${a.due ? ' · กำหนดส่ง ' + esc(thDateTime(a.due)) : ''}</p>
         ${a.mine && a.mine.status === 'revise' ? `<p class="result warn small">ครูให้แก้ไข${a.mine.comment ? ': ' + esc(a.mine.comment) : ''}</p>` : ''}
         <div class="row">
-          <label class="btn primary grow" for="cam">📷 ถ่ายรูป</label>
-          <label class="btn grow" for="pick">🖼️ เลือกรูป</label>
+          <label class="btn primary grow" for="cam">${icon('camera')} ถ่ายรูป</label>
+          <label class="btn grow" for="pick">${icon('image')} เลือกรูป</label>
         </div>
         <input id="cam" type="file" accept="image/*" capture="environment" class="hidden">
         <input id="pick" type="file" accept="image/*" multiple class="hidden">
         <p class="small muted" style="margin-top:8px">ถ่ายให้เห็นตัวหนังสือชัด แสงพอ เห็นทั้งหน้า ส่งได้หลายรูป (เรียงตามหน้า)</p>
         <div class="thumbs" id="thumbs" aria-live="polite"></div>
         <div id="progress" class="hidden"><div class="bar"><i style="width:0"></i></div><p class="small center" id="progress-text"></p></div>
-        <button class="btn ok block" id="sub-send" type="button" disabled>ส่งงาน</button>
+        <button class="btn ok block" id="sub-send" type="button" disabled>${icon('send')}ส่งงาน</button>
       </div>`;
     $('#sub-back').addEventListener('click', () => { if (photos.length && !confirm('ยกเลิกรูปที่เลือกไว้?')) return; activeAsg = null; photos = []; renderSubmit(); });
     $('#cam').addEventListener('change', (e) => addFiles(e.target.files));
@@ -250,11 +250,11 @@
 
   function drawThumbs() {
     const box = $('#thumbs'); if (!box) return;
-    box.innerHTML = photos.map((p, i) => `<div class="thumb"><img src="${p.url}" alt="รูปที่ ${i + 1}"><button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}">✕</button></div>`).join('');
+    box.innerHTML = photos.map((p, i) => `<div class="thumb"><img src="${p.url}" alt="รูปที่ ${i + 1}"><button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}">${icon('x')}</button></div>`).join('');
     $$('[data-rm]', box).forEach((b) => b.addEventListener('click', () => { URL.revokeObjectURL(photos[b.dataset.rm].url); photos.splice(b.dataset.rm, 1); batchId = null; drawThumbs(); }));
     const send = $('#sub-send');
     send.disabled = !photos.length;
-    send.textContent = photos.length ? `ส่งงาน (${photos.length} รูป)` : 'ส่งงาน';
+    send.innerHTML = icon('send') + (photos.length ? `ส่งงาน (${photos.length} รูป)` : 'ส่งงาน');
   }
 
   async function compress(file) {
@@ -294,7 +294,7 @@
       photos = []; activeAsg = null; batchId = null;
       await refresh();
       switchTab('submit');
-      $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">✅</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} รูป · เลขที่ ${esc(receipt.receipt.receiptId)}</p></div>`);
+      $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">${icon('checkCircle')}</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} รูป · เลขที่ ${esc(receipt.receipt.receiptId)}</p></div>`);
       window.scrollTo({ top: 0 });
       await Receipt.show(receipt, () => Promise.all(urls.map(Receipt.loadImage)));
       urls.forEach((u) => URL.revokeObjectURL(u));
@@ -319,15 +319,15 @@
     const done = me.assignments.filter((a) => a.mine && a.mine.score !== null);
     const got = done.reduce((n, a) => n + a.mine.score, 0), full = me.assignments.reduce((n, a) => n + a.maxScore, 0);
     el.innerHTML = `
-      <h2 style="margin-top:16px">ผลของฉัน</h2>
+      <h2 style="margin-top:16px">${icon('chart')}ผลของฉัน</h2>
       <div class="grid cols-2">
-        <div class="card"><h3>คะแนนเข้าเรียน</h3>
+        <div class="card"><h3>${icon('userCheck')}คะแนนเข้าเรียน</h3>
           <div class="stat"><b>${fmtNum(t.score)} / ${fmtNum(t.max)}</b><span>${pct}% จาก ${t.sessions} คาบ</span></div>
           <p class="small muted" style="margin-top:10px">มา ${t.present} · สาย ${t.late} · ลา ${t.leave} · ขาด ${t.absent}</p></div>
-        <div class="card"><h3>คะแนนส่งงาน</h3>
+        <div class="card"><h3>${icon('book')}คะแนนส่งงาน</h3>
           <div class="stat"><b>${fmtNum(got)} / ${fmtNum(full)}</b><span>${me.assignments.length} งาน · ตรวจแล้ว ${done.length}</span></div></div>
       </div>
-      <div class="card"><h3>การเข้าเรียนล่าสุด</h3>
+      <div class="card"><h3>${icon('calendar')}การเข้าเรียนล่าสุด</h3>
         ${me.attendance.length ? `<table><tbody>${me.attendance.map((a) => `<tr><td>${esc(thDate(a.date))}${a.subject ? ' <span class="muted small">' + esc(a.subject) + '</span>' : ''}</td><td>${a.time ? esc(thTime(a.time)) : ''}</td><td class="num">${badge(a.status)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">ยังไม่มีข้อมูล</p>'}
       </div>`;
   }
