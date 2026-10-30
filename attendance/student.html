@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>นักเรียน เช็กชื่อและส่งงาน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">เช็กชื่อและส่งงาน</div>
+    <div class="who hidden" id="who"></div>
+    <button class="btn sm hidden" id="logout" type="button">ออก</button>
+  </div>
+</header>
+
+<main id="main">
+  <!-- เข้าสู่ระบบ -->
+  <section id="view-login" class="narrow hidden">
+    <div class="card">
+      <h1>เข้าสู่ระบบ</h1>
+      <p class="muted" id="login-note">ใช้เลขประจำตัวนักเรียนและ PIN 4 หลักของคุณ</p>
+      <form id="login-form" autocomplete="off">
+        <label class="field">เลขประจำตัวนักเรียน
+          <input id="login-id" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="12" required>
+        </label>
+        <label class="field">PIN 4 หลัก
+          <input id="login-pin" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off">
+          <span class="hint">ถ้ายังไม่เคยใช้ ให้เว้นว่างไว้ แล้วกด "เข้าสู่ระบบ" เพื่อตั้ง PIN</span>
+        </label>
+        <button class="btn primary block" type="submit">เข้าสู่ระบบ</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ตั้ง PIN ครั้งแรก -->
+  <section id="view-setup" class="narrow hidden">
+    <div class="card">
+      <h1>ตั้ง PIN ครั้งแรก</h1>
+      <p>คุณคือ <b id="setup-name"></b> ใช่ไหม?</p>
+      <p class="muted small">ถ้าไม่ใช่ ให้กด "ไม่ใช่ฉัน" แล้วตรวจเลขประจำตัวอีกครั้ง PIN ใช้ยืนยันตัวตนเวลาเช็กชื่อและส่งงาน อย่าบอกคนอื่น</p>
+      <form id="setup-form" autocomplete="off">
+        <label class="field">ตั้ง PIN 4 หลัก
+          <input id="setup-pin" class="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
+        </label>
+        <label class="field">ยืนยัน PIN อีกครั้ง
+          <input id="setup-pin2" class="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
+        </label>
+        <button class="btn primary block" type="submit">ยืนยัน ตั้ง PIN และเข้าสู่ระบบ</button>
+        <button class="btn block" type="button" id="setup-cancel" style="margin-top:8px">ไม่ใช่ฉัน</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- แอป -->
+  <section id="view-app" class="wrap hidden">
+    <div id="tab-checkin" role="tabpanel"></div>
+    <div id="tab-submit" role="tabpanel" class="hidden"></div>
+    <div id="tab-me" role="tabpanel" class="hidden"></div>
+  </section>
+</main>
+
+<nav class="bottomnav hidden" id="nav" aria-label="เมนูหลัก" role="tablist">
+  <button type="button" role="tab" data-tab="checkin" aria-selected="true">เช็กชื่อ</button>
+  <button type="button" role="tab" data-tab="submit" aria-selected="false">ส่งงาน</button>
+  <button type="button" role="tab" data-tab="me" aria-selected="false">ผลของฉัน</button>
+</nav>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="student.js"></script>
+</body>
+</html>

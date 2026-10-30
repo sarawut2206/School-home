@@ -1,0 +1,285 @@
+/* หน้านักเรียน: เข้าสู่ระบบ → เช็กชื่อ (สแกน QR) → ส่งงานด้วยรูปถ่าย → ดูผลของตัวเอง */
+(function () {
+  const params = new URLSearchParams(location.search);
+  let pending = params.get('s') && params.get('t') ? { s: params.get('s'), t: params.get('t') } : null;
+  if (pending) history.replaceState(null, '', location.pathname); // กัน QR ค้างอยู่ใน URL/ประวัติเบราว์เซอร์
+
+  let session = null;          // { token, student, exp }
+  let me = null;               // ข้อมูลจาก action "me"
+  let checkinResult = null;    // ผลเช็กชื่อล่าสุด
+  let activeAsg = null;        // งานที่กำลังส่ง
+  let photos = [];             // รูปที่เลือกไว้ (ย่อแล้ว)
+  let setupId = '';
+
+  const show = (id) => ['view-login', 'view-setup', 'view-app'].forEach((v) => $('#' + v).classList.toggle('hidden', v !== id));
+  const showNav = (on) => $('#nav').classList.toggle('hidden', !on);
+
+  function saveSession(res) {
+    session = { token: res.token, student: res.student };
+    store.set('session', JSON.stringify({ ...session, at: Date.now() }));
+    store.set('lastId', res.student.id);
+  }
+  function loadSession() {
+    try {
+      const s = JSON.parse(store.get('session') || 'null');
+      if (s && Date.now() - s.at < 9.5 * 3600e3) return s;
+    } catch (e) { /* ไม่มี */ }
+    return null;
+  }
+  function logout() {
+    store.del('session');
+    session = null; me = null; checkinResult = null;
+    $('#who').classList.add('hidden'); $('#logout').classList.add('hidden'); showNav(false);
+    $('#login-pin').value = '';
+    $('#login-id').value = store.get('lastId') || '';
+    show('view-login');
+  }
+  const authLost = (e) => {
+    if (e && e.code === 'AUTH') { logout(); toast('หมดเวลาเข้าสู่ระบบ กรุณาเข้าสู่ระบบอีกครั้ง', true); return true; }
+    return false;
+  };
+
+  // ───── เข้าสู่ระบบ ─────
+  $('#login-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = ev.submitter || $('#login-form button');
+    const id = $('#login-id').value.trim(), pin = $('#login-pin').value;
+    await busy(btn, async () => {
+      try {
+        btn.textContent = 'กำลังตรวจสอบ…';
+        const res = await api('login', { id, pin });
+        if (res.needSetup) {
+          setupId = id;
+          $('#setup-name').textContent = res.name;
+          $('#setup-pin').value = ''; $('#setup-pin2').value = '';
+          show('view-setup');
+          return;
+        }
+        saveSession(res);
+        await enter();
+      } catch (e) { toast(e.message || 'เข้าสู่ระบบไม่สำเร็จ', true); }
+    });
+  });
+
+  $('#setup-cancel').addEventListener('click', () => { show('view-login'); });
+  $('#setup-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const pin = $('#setup-pin').value;
+    if (!/^\d{4}$/.test(pin)) return toast('PIN ต้องเป็นตัวเลข 4 หลัก', true);
+    if (pin !== $('#setup-pin2').value) return toast('PIN สองช่องไม่ตรงกัน', true);
+    await busy(ev.submitter, async () => {
+      try {
+        const res = await api('setPin', { id: setupId, pin, deviceId: deviceId() });
+        saveSession(res);
+        toast('ตั้ง PIN เรียบร้อย');
+        await enter();
+      } catch (e) { toast(e.message, true); }
+    });
+  });
+  $('#logout').addEventListener('click', logout);
+
+  // ───── เข้าแอป ─────
+  async function enter() {
+    $('#who').textContent = session.student.name + ' · ห้อง ' + session.student.room;
+    $('#who').classList.remove('hidden'); $('#logout').classList.remove('hidden');
+    show('view-app'); showNav(true);
+    $('#tab-checkin').innerHTML = '<div class="card center muted">กำลังโหลด…</div>';
+    if (pending) {
+      const p = pending; pending = null;
+      try {
+        checkinResult = { ok: true, ...(await api('checkin', { token: session.token, sessionId: p.s, t: p.t, deviceId: deviceId() })) };
+      } catch (e) {
+        if (authLost(e)) { pending = p; return; }
+        checkinResult = { ok: false, code: e.code, message: e.message };
+      }
+    }
+    await refresh();
+    switchTab('checkin');
+  }
+
+  async function refresh() {
+    try { me = await api('me', { token: session.token }); }
+    catch (e) { if (!authLost(e)) toast(e.message, true); return; }
+    renderCheckin(); renderSubmit(); renderMe();
+  }
+
+  function switchTab(name) {
+    $$('#nav button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    ['checkin', 'submit', 'me'].forEach((t) => $('#tab-' + t).classList.toggle('hidden', t !== name));
+    window.scrollTo({ top: 0 });
+  }
+  $$('#nav button').forEach((b) => b.addEventListener('click', async () => { switchTab(b.dataset.tab); if (b.dataset.tab !== 'submit' || !activeAsg) await refresh(); }));
+
+  // ───── แท็บเช็กชื่อ ─────
+  function renderCheckin() {
+    const el = $('#tab-checkin');
+    let top = '';
+    if (checkinResult) {
+      const r = checkinResult;
+      if (r.ok) {
+        const late = r.status === 'late';
+        top = `<div class="result ${late ? 'warn' : 'ok'}" role="status">
+          <div class="big" aria-hidden="true">${late ? '⏰' : '✅'}</div>
+          <h2>${r.already ? 'เช็กชื่อไว้แล้ว' : 'เช็กชื่อสำเร็จ'}</h2>
+          <p>${late ? 'มาสาย' : 'มาเรียนตรงเวลา'} · ${esc(thTime(r.time))} น.${r.subject ? '<br>' + esc(r.subject) : ''}</p></div>`;
+      } else {
+        top = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">⚠️</div><h2>เช็กชื่อไม่สำเร็จ</h2><p>${esc(r.message)}</p></div>`;
+      }
+    }
+    const open = me && me.openSession;
+    const todayRows = (me ? me.attendance : []).filter((a) => a.status !== 'pending').slice(0, 1);
+    el.innerHTML = `
+      ${top}
+      <div class="card">
+        <h2>วิธีเช็กชื่อ</h2>
+        <ol>
+          <li>เปิดกล้องโทรศัพท์ แล้วสแกน QR ที่หน้าห้อง</li>
+          <li>กดลิงก์ที่ขึ้นมา (เข้าสู่ระบบแล้วจะเช็กชื่อให้อัตโนมัติ)</li>
+        </ol>
+        ${open ? `<p class="small">ตอนนี้ครูเปิดคาบเช็กชื่อ${open.subject ? ' วิชา ' + esc(open.subject) : ''} อยู่ ให้สแกน QR บนจอหน้าห้อง</p>` : '<p class="muted small">ขณะนี้ยังไม่มีคาบที่เปิดเช็กชื่อ</p>'}
+        ${todayRows.length ? `<p class="small muted">คาบล่าสุด: ${esc(thDate(todayRows[0].date))} ${badge(todayRows[0].status)}</p>` : ''}
+        <p class="small muted">QR เปลี่ยนรหัสทุกไม่กี่วินาที ถ่ายรูป QR ส่งให้เพื่อนสแกนไม่ได้ และเครื่องหนึ่งเครื่องเช็กชื่อได้คนเดียว</p>
+      </div>`;
+  }
+
+  // ───── แท็บส่งงาน ─────
+  function renderSubmit() {
+    const el = $('#tab-submit');
+    if (activeAsg) return renderSubmitForm(el);
+    const list = me ? me.assignments : [];
+    if (!list.length) { el.innerHTML = '<div class="card center muted">ยังไม่มีงานที่ครูมอบหมาย</div>'; return; }
+    el.innerHTML = `<h2 style="margin-top:16px">งานของฉัน</h2>` + list.map((a) => {
+      const m = a.mine, st = m ? m.status : (a.status === 'open' ? 'missing' : 'missing');
+      const score = m && m.score !== null ? ` · ${fmtNum(m.score)}/${fmtNum(a.maxScore)}` : '';
+      return `<div class="card"><div class="row"><div class="grow"><h3>${esc(a.title)}</h3>
+        <div class="small muted">คะแนนเต็ม ${fmtNum(a.maxScore)}${a.due ? ' · กำหนดส่ง ' + esc(thDateTime(a.due)) : ''}${a.status === 'closed' ? ' · ปิดรับแล้ว' : ''}</div></div>
+        ${badge(st)}</div>
+        ${m ? `<p class="small" style="margin-top:8px">ส่งแล้ว ${m.count} รูป · รอบที่ ${m.round}${score}${m.late ? ' · ส่งช้า' : ''}</p>` : ''}
+        ${m && m.comment ? `<p class="small"><b>ครูเขียนว่า:</b> ${esc(m.comment)}</p>` : ''}
+        ${a.status === 'open' && !(m && m.status === 'done')
+          ? `<button class="btn primary block" data-asg="${esc(a.assignmentId)}" type="button">${m ? (m.status === 'revise' ? 'ส่งงานที่แก้ไขแล้ว' : 'ส่งเพิ่ม/ส่งใหม่') : 'ส่งงานนี้'}</button>` : ''}
+      </div>`;
+    }).join('');
+    $$('[data-asg]', el).forEach((b) => b.addEventListener('click', () => { activeAsg = me.assignments.find((a) => a.assignmentId === b.dataset.asg); photos = []; renderSubmit(); window.scrollTo({ top: 0 }); }));
+  }
+
+  function renderSubmitForm(el) {
+    const a = activeAsg;
+    el.innerHTML = `
+      <div class="card">
+        <button class="btn sm" type="button" id="sub-back">← กลับ</button>
+        <h2 style="margin-top:12px">${esc(a.title)}</h2>
+        <p class="small muted">คะแนนเต็ม ${fmtNum(a.maxScore)}${a.due ? ' · กำหนดส่ง ' + esc(thDateTime(a.due)) : ''}</p>
+        ${a.mine && a.mine.status === 'revise' ? `<p class="result warn small">ครูให้แก้ไข${a.mine.comment ? ': ' + esc(a.mine.comment) : ''}</p>` : ''}
+        <div class="row">
+          <label class="btn primary grow" for="cam">📷 ถ่ายรูป</label>
+          <label class="btn grow" for="pick">🖼️ เลือกรูป</label>
+        </div>
+        <input id="cam" type="file" accept="image/*" capture="environment" class="hidden">
+        <input id="pick" type="file" accept="image/*" multiple class="hidden">
+        <p class="small muted" style="margin-top:8px">ถ่ายให้เห็นตัวหนังสือชัด แสงพอ เห็นทั้งหน้า ส่งได้หลายรูป (เรียงตามหน้า)</p>
+        <div class="thumbs" id="thumbs" aria-live="polite"></div>
+        <div id="progress" class="hidden"><div class="bar"><i style="width:0"></i></div><p class="small center" id="progress-text"></p></div>
+        <button class="btn ok block" id="sub-send" type="button" disabled>ส่งงาน</button>
+      </div>`;
+    $('#sub-back').addEventListener('click', () => { if (photos.length && !confirm('ยกเลิกรูปที่เลือกไว้?')) return; activeAsg = null; photos = []; renderSubmit(); });
+    $('#cam').addEventListener('change', (e) => addFiles(e.target.files));
+    $('#pick').addEventListener('change', (e) => addFiles(e.target.files));
+    $('#sub-send').addEventListener('click', send);
+    drawThumbs();
+  }
+
+  async function addFiles(files) {
+    const max = 8;
+    for (const f of Array.from(files)) {
+      if (photos.length >= max) { toast(`ส่งได้ไม่เกิน ${max} รูปต่อครั้ง`, true); break; }
+      try { photos.push(await compress(f)); }
+      catch (e) { toast('เปิดรูปนี้ไม่ได้ ลองถ่ายใหม่หรือเลือกไฟล์ JPG/PNG', true); }
+    }
+    $('#cam').value = ''; $('#pick').value = '';
+    drawThumbs();
+  }
+
+  function drawThumbs() {
+    const box = $('#thumbs'); if (!box) return;
+    box.innerHTML = photos.map((p, i) => `<div class="thumb"><img src="${p.url}" alt="รูปที่ ${i + 1}"><button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}">✕</button></div>`).join('');
+    $$('[data-rm]', box).forEach((b) => b.addEventListener('click', () => { URL.revokeObjectURL(photos[b.dataset.rm].url); photos.splice(b.dataset.rm, 1); drawThumbs(); }));
+    const send = $('#sub-send');
+    send.disabled = !photos.length;
+    send.textContent = photos.length ? `ส่งงาน (${photos.length} รูป)` : 'ส่งงาน';
+  }
+
+  async function compress(file) {
+    const MAX = 1600;
+    let bmp;
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch (e) {
+      bmp = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
+    }
+    const w = bmp.width, h = bmp.height, k = Math.min(1, MAX / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * k); c.height = Math.round(h * k);
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.78));
+    if (!blob) throw new Error('compress');
+    const b64 = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
+    return { b64, url: URL.createObjectURL(blob), size: blob.size };
+  }
+
+  async function send() {
+    const btn = $('#sub-send'), total = photos.length, batchId = uuid();
+    const bar = $('#progress'), fill = $('#progress i'), txt = $('#progress-text');
+    btn.disabled = true; bar.classList.remove('hidden');
+    $('#cam').disabled = true; $('#pick').disabled = true;
+    try {
+      for (let i = 0; i < total; i++) {
+        txt.textContent = `กำลังส่งรูปที่ ${i + 1} จาก ${total} … อย่าปิดหน้านี้`;
+        fill.style.width = (i / total * 100) + '%';
+        await api('submitImage', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, idx: i, data: photos[i].b64 }, { tries: 4 });
+      }
+      fill.style.width = '100%';
+      const title = activeAsg.title;
+      photos.forEach((p) => URL.revokeObjectURL(p.url));
+      photos = []; activeAsg = null;
+      await refresh();
+      switchTab('submit');
+      $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">✅</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} รูป · รอครูตรวจ</p></div>`);
+      window.scrollTo({ top: 0 });
+    } catch (e) {
+      if (authLost(e)) return;
+      toast((e.message || 'ส่งไม่สำเร็จ') + ' (รูปที่เลือกยังอยู่ กดส่งอีกครั้งได้)', true);
+      $('#cam').disabled = false; $('#pick').disabled = false; btn.disabled = false; bar.classList.add('hidden');
+    }
+  }
+
+  // ───── แท็บผลของฉัน ─────
+  function renderMe() {
+    const el = $('#tab-me');
+    const t = me.attTotals, pct = t.max ? Math.round(t.score / t.max * 100) : 0;
+    const done = me.assignments.filter((a) => a.mine && a.mine.score !== null);
+    const got = done.reduce((n, a) => n + a.mine.score, 0), full = me.assignments.reduce((n, a) => n + a.maxScore, 0);
+    el.innerHTML = `
+      <h2 style="margin-top:16px">ผลของฉัน</h2>
+      <div class="grid cols-2">
+        <div class="card"><h3>คะแนนเข้าเรียน</h3>
+          <div class="stat"><b>${fmtNum(t.score)} / ${fmtNum(t.max)}</b><span>${pct}% จาก ${t.sessions} คาบ</span></div>
+          <p class="small muted" style="margin-top:10px">มา ${t.present} · สาย ${t.late} · ลา ${t.leave} · ขาด ${t.absent}</p></div>
+        <div class="card"><h3>คะแนนส่งงาน</h3>
+          <div class="stat"><b>${fmtNum(got)} / ${fmtNum(full)}</b><span>${me.assignments.length} งาน · ตรวจแล้ว ${done.length}</span></div></div>
+      </div>
+      <div class="card"><h3>การเข้าเรียนล่าสุด</h3>
+        ${me.attendance.length ? `<table><tbody>${me.attendance.map((a) => `<tr><td>${esc(thDate(a.date))}${a.subject ? ' <span class="muted small">' + esc(a.subject) + '</span>' : ''}</td><td>${a.time ? esc(thTime(a.time)) : ''}</td><td class="num">${badge(a.status)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">ยังไม่มีข้อมูล</p>'}
+      </div>`;
+  }
+
+  // ───── เริ่มต้น ─────
+  (async function init() {
+    $('#login-id').value = store.get('lastId') || '';
+    const s = loadSession();
+    if (s) { session = s; await enter(); return; }
+    if (pending) $('#login-note').textContent = 'เข้าสู่ระบบเพื่อเช็กชื่อ (จะเช็กชื่อให้ทันทีหลังเข้าสู่ระบบ)';
+    show('view-login');
+  })();
+})();

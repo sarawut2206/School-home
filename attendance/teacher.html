@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>ครู เช็กชื่อและตรวจงาน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">ครู · เช็กชื่อและตรวจงาน</div>
+    <button class="btn sm hidden" id="logout" type="button">ออกจากระบบ</button>
+  </div>
+</header>
+
+<main>
+  <section id="view-login" class="narrow hidden">
+    <div class="card">
+      <h1>เข้าสู่ระบบครู</h1>
+      <form id="login-form">
+        <label class="field">รหัสผ่านครู
+          <input id="pass" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="btn primary block" type="submit">เข้าสู่ระบบ</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="view-app" class="wrap hidden">
+    <div class="tabs" role="tablist" id="tabs">
+      <button class="tab" role="tab" data-tab="checkin" aria-selected="true">เช็กชื่อ</button>
+      <button class="tab" role="tab" data-tab="assign" aria-selected="false">มอบหมายงาน</button>
+      <button class="tab" role="tab" data-tab="review" aria-selected="false">ตรวจงาน</button>
+      <button class="tab" role="tab" data-tab="report" aria-selected="false">คะแนนและรายงาน</button>
+      <button class="tab" role="tab" data-tab="settings" aria-selected="false">นักเรียนและตั้งค่า</button>
+    </div>
+    <div id="p-checkin" role="tabpanel"></div>
+    <div id="p-assign" role="tabpanel" class="hidden"></div>
+    <div id="p-review" role="tabpanel" class="hidden"></div>
+    <div id="p-report" role="tabpanel" class="hidden"></div>
+    <div id="p-settings" role="tabpanel" class="hidden"></div>
+  </section>
+</main>
+<div id="modal-root"></div>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="vendor/qrcode.min.js"></script>
+<script src="teacher.js"></script>
+</body>
+</html>
