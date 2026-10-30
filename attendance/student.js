@@ -1,4 +1,4 @@
-/* หน้านักเรียน: เข้าสู่ระบบ → เช็กชื่อ (สแกน QR) → ส่งงานด้วยรูปถ่าย → ดูผลของตัวเอง */
+/* หน้านักเรียน: เข้าสู่ระบบ → เช็กชื่อ (สแกน QR หรือกดปุ่มในแอป) → ส่งงานด้วยรูปถ่าย → ดูผลของตัวเอง */
 (function () {
   const params = new URLSearchParams(location.search);
   let pending = params.get('s') && params.get('t') ? { s: params.get('s'), t: params.get('t') } : null;
@@ -143,21 +143,47 @@
         top = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">⚠️</div><h2>เช็กชื่อไม่สำเร็จ</h2><p>${esc(r.message)}</p></div>`;
       }
     }
-    const open = me && me.openSession;
+    const list = me ? (me.openSessions || []) : [];
     const todayRows = (me ? me.attendance : []).filter((a) => a.status !== 'pending').slice(0, 1);
+    const sessCards = list.map((x) => {
+      const what = `${x.subject ? esc(x.subject) : 'คาบเรียน'}${x.classLabel ? ' · ' + esc(x.classLabel) : ''}`;
+      const until = `รับเช็กชื่อถึง ${esc(thTime(x.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(x.onTimeUntil))} น.`;
+      if (x.checked) return `<div class="card"><div class="row"><div class="grow"><h3>${what}</h3><div class="small muted">${esc(x.label)}</div></div>${badge(x.checked)}</div><p class="small muted" style="margin:8px 0 0">เช็กชื่อเรียบร้อยแล้ว</p></div>`;
+      if (x.app) return `<div class="card"><h2>เช็กชื่อเข้าเรียน</h2><p style="margin-bottom:4px"><b>${what}</b></p><p class="small muted">${until}</p>
+        <button class="btn primary block" data-ci="${esc(x.sessionId)}" type="button" style="font-size:1.15rem;min-height:56px">✋ เช็กชื่อ</button></div>`;
+      return `<div class="card"><h3>${what}</h3><p class="small">คาบนี้ให้เช็กชื่อด้วยการ <b>สแกน QR</b> ที่ครูส่งให้หรือที่หน้าห้อง</p><p class="small muted">${until}</p></div>`;
+    }).join('');
     el.innerHTML = `
       ${top}
+      ${sessCards || '<div class="card"><h2>เช็กชื่อ</h2><p class="muted">ขณะนี้ยังไม่มีคาบที่เปิดเช็กชื่อ รอครูเปิดคาบ แล้วจะมีปุ่มเช็กชื่อขึ้นที่นี่ (หรือสแกน QR ที่ครูส่งให้)</p></div>'}
       <div class="card">
-        <h2>วิธีเช็กชื่อ</h2>
-        <ol>
-          <li>เปิดกล้องโทรศัพท์ แล้วสแกน QR ที่หน้าห้อง</li>
-          <li>กดลิงก์ที่ขึ้นมา (เข้าสู่ระบบแล้วจะเช็กชื่อให้อัตโนมัติ)</li>
+        <h3>วิธีเช็กชื่อ</h3>
+        <ol class="small" style="margin:0;padding-left:20px">
+          <li>กดปุ่ม <b>เช็กชื่อ</b> ด้านบน (เมื่อครูเปิดคาบ)</li>
+          <li>หรือสแกน QR ที่ครูส่งให้ / ที่หน้าห้อง แล้วเข้าสู่ระบบ ระบบจะเช็กชื่อให้อัตโนมัติ</li>
         </ol>
-        ${open ? `<p class="small">ตอนนี้ครูเปิดคาบเช็กชื่อ${open.subject ? ' วิชา ' + esc(open.subject) : ''} อยู่ ให้สแกน QR บนจอหน้าห้อง</p>` : '<p class="muted small">ขณะนี้ยังไม่มีคาบที่เปิดเช็กชื่อ</p>'}
-        ${todayRows.length ? `<p class="small muted">คาบล่าสุด: ${esc(thDate(todayRows[0].date))} ${badge(todayRows[0].status)}</p>` : ''}
-        <p class="small muted">QR เปลี่ยนรหัสทุกไม่กี่วินาที ถ่ายรูป QR ส่งให้เพื่อนสแกนไม่ได้ และเครื่องหนึ่งเครื่องเช็กชื่อได้คนเดียว</p>
+        ${todayRows.length ? `<p class="small muted" style="margin-top:10px">คาบล่าสุด: ${esc(thDate(todayRows[0].date))} ${badge(todayRows[0].status)}</p>` : ''}
+        <p class="small muted">เครื่องหนึ่งเครื่องเช็กชื่อได้คนเดียว ถ้าใช้เครื่องเดียวกันเช็กแทนเพื่อน ระบบจะแจ้งครู</p>
       </div>`;
+    $$('[data-ci]', el).forEach((b) => b.addEventListener('click', () => busy(b, async () => {
+      try {
+        checkinResult = { ok: true, ...(await api('checkin', { token: session.token, sessionId: b.dataset.ci, app: true, deviceId: deviceId() })) };
+      } catch (e) {
+        if (authLost(e)) return;
+        checkinResult = { ok: false, code: e.code, message: e.message };
+      }
+      await refresh();
+      window.scrollTo({ top: 0 });
+    })));
   }
+
+  // ถามสถานะคาบเป็นระยะ: ครูเปิดคาบแล้วปุ่มเช็กชื่อขึ้นเอง
+  async function pollOpen() {
+    if (!session || !me || document.hidden || $('#tab-checkin').classList.contains('hidden')) return;
+    try { me = await api('me', { token: session.token }, { tries: 1 }); renderCheckin(); } catch (e) { authLost(e); }
+  }
+  setInterval(pollOpen, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollOpen(); });
 
   // ───── แท็บส่งงาน ─────
   function renderSubmit() {

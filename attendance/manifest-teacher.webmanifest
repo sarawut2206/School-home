@@ -1,0 +1,18 @@
+{
+  "id": "teacher.html",
+  "name": "NK EduTrack · ครู",
+  "short_name": "NK ครู",
+  "description": "ตารางสอน สร้าง QR เช็กชื่อ มอบหมายและตรวจงาน และรายงานคะแนน",
+  "lang": "th",
+  "start_url": "teacher.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6fb",
+  "theme_color": "#3056d3",
+  "icons": [
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

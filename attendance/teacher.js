@@ -1,4 +1,4 @@
-/* หน้าครู: เปิดคาบ/QR หมุนรหัส, มอบหมายงาน, ตรวจงานจากรูป, รายงานคะแนน, จัดการนักเรียน */
+/* หน้าครู: ตารางสอน/QR 1 อัน ต่อ 1 คาบ, เช็กชื่อสด, มอบหมายงาน, ตรวจงานจากรูป, รายงานคะแนน, จัดการนักเรียน */
 (function () {
   let tt = store.get('tt', 'session');
   let rooms = [];
@@ -90,16 +90,18 @@
     box.innerHTML = '<div class="card muted">กำลังโหลด…</div>';
     let st;
     try { st = await T('t_sessionStatus', { sessionId: sid }); } catch (e) { fail(e); return; }
-    const open = st.session.status === 'open';
+    const open = st.session.status === 'open', rot = st.session.mode === 'rotate';
+    live.sess = st.session;
     box.innerHTML = `<div class="grid ${open ? 'cols-2' : ''}">
       ${open ? `<div class="card">
         <div class="qrbox" id="qrbox"><div id="qr" role="img" aria-label="QR Code เช็กชื่อ"></div>
-          <div class="count" id="qrcount"></div><div class="countdown" id="cd"></div></div>
-        <div class="row" style="margin-top:12px"><button class="btn grow" id="fs" type="button">แสดงเต็มจอ</button><button class="btn danger grow" id="close" type="button">ปิดคาบ (บันทึกขาด)</button></div>
-        <p class="small muted" style="margin-top:8px">QR เปลี่ยนรหัสอัตโนมัติ นักเรียนที่เหลือเวลาเช็กชื่อ ${esc(thTime(st.session.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(st.session.onTimeUntil))} น.</p></div>` : ''}
+          <div class="count" id="qrcount"></div>${rot ? '<div class="countdown" id="cd"></div>' : ''}</div>
+        <div class="row" style="margin-top:12px">${rot ? '' : '<button class="btn primary grow" id="qr-img" type="button">ส่งรูป QR ให้นักเรียน</button>'}<button class="btn grow" id="fs" type="button">แสดงเต็มจอ</button><button class="btn danger grow" id="close" type="button">ปิดคาบ (บันทึกขาด)</button></div>
+        <p class="small muted" style="margin-top:8px">${rot ? 'QR เปลี่ยนรหัสอัตโนมัติ (คาบแบบเก่า) ' : 'QR 1 อัน ต่อ 1 คาบ ไม่เปลี่ยนรหัส ' + (st.session.app ? '· นักเรียนกดเช็กชื่อในแอปได้ด้วย ' : '')}· รับเช็กชื่อถึง ${esc(thTime(st.session.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(st.session.onTimeUntil))} น.</p></div>` : ''}
       <div class="card" id="roster"></div></div>`;
     drawRoster(st);
     if (open) {
+      if (!rot) $('#qr-img').addEventListener('click', () => showQrResult(st.session));
       $('#fs').addEventListener('click', () => { const q = $('#qrbox'); if (document.fullscreenElement) document.exitFullscreen(); else if (q.requestFullscreen) q.requestFullscreen(); else toast('เบราว์เซอร์นี้ไม่รองรับเต็มจอ', true); });
       $('#close').addEventListener('click', async (e) => {
         if (!confirm('ปิดคาบนี้? คนที่ยังไม่เช็กชื่อจะถูกบันทึกเป็น "ขาด" (แก้ไขภายหลังได้)')) return;
@@ -108,7 +110,7 @@
         });
       });
       await refreshToken();
-      live.timers.push(setInterval(tick, 500));
+      if (rot) live.timers.push(setInterval(tick, 500));
       live.timers.push(setInterval(pollStatus, 5000));
     }
   }
@@ -142,13 +144,14 @@
     live.fetching = true;
     try {
       const r = await T('t_token', { sessionId: live.sid });
-      live.token = r.token; live.nextAt = Date.now() + r.nextInSec * 1000 + 300;
+      live.token = r.token; live.nextAt = r.nextInSec ? Date.now() + r.nextInSec * 1000 + 300 : Infinity;   // QR คงที่ไม่ต้องขอรหัสใหม่
       drawQR();
     } catch (e) {
       if (e.code === 'SESSION_CLOSED') { toast('คาบนี้ถูกปิดแล้ว'); showSession(live.sid); } else live.nextAt = Date.now() + 3000;
     } finally { live.fetching = false; }
   }
   function tick() {
+    if (!isFinite(live.nextAt)) return;
     const left = Math.ceil((live.nextAt - Date.now()) / 1000);
     const cd = $('#cd'); if (cd) cd.textContent = left > 0 ? `QR เปลี่ยนรหัสใน ${left} วินาที` : 'กำลังเปลี่ยนรหัส…';
     if (left <= 0) refreshToken();
@@ -283,11 +286,9 @@
           <label class="field">เวลาเริ่มคาบ<input id="qd-start" type="time" value="${esc(start)}" required><span class="hint">คนที่เช็กชื่อหลังเวลานี้เกินที่กำหนดจะนับ "สาย"</span></label>
           <label class="field">ตรงเวลาภายใน (นาที)<input id="qd-on" type="number" min="0" max="120" value="${esc(cfg.onTimeMin ?? 10)}"></label>
           <label class="field">รับเช็กชื่อถึง (นาทีหลังเริ่ม)<input id="qd-late" type="number" min="5" max="240" value="${esc(cfg.lateMin ?? 30)}"><span class="hint">หลังจากนี้สแกนไม่ได้ ต้องให้ครูบันทึกให้</span></label>
-          <label class="field">รูปแบบ QR<select id="qd-mode">
-            <option value="image">รูปภาพ ส่งให้นักเรียนได้</option>
-            <option value="rotate">ฉายหน้าจอ รหัสหมุนทุก 45 วินาที</option></select></label>
+          <label class="field" style="grid-column:1/-1;flex-direction:row;display:flex;gap:10px;align-items:flex-start"><input id="qd-app" type="checkbox" checked style="width:22px;height:22px;margin-top:2px;flex:none"><span>ให้นักเรียนกด "เช็กชื่อ" ในแอปได้ด้วย (ไม่ต้องสแกน)<span class="hint" style="display:block">ถ้าไม่ติ๊ก นักเรียนต้องสแกน QR จากรูปที่ส่งไปเท่านั้น</span></span></label>
         </div>
-        <p class="small muted" id="qd-hint">รูปภาพส่งต่อได้ จึงเหมาะกับการส่งใน LINE กลุ่มห้อง ${loginMode === 'pin' ? 'ระบบยังป้องกันด้วย PIN ของนักเรียนแต่ละคน และ ' : 'ระบบป้องกันด้วย '}1 เครื่อง = 1 คน (ติดธงถ้าซ้ำ) และหมดอายุตามเวลารับเช็กชื่อ</p>
+        <p class="small muted" id="qd-hint">ได้ QR 1 อัน ต่อ 1 คาบ ไม่เปลี่ยนรหัส บันทึกรูปแล้วส่งใน LINE กลุ่มห้องได้เลย ใช้ได้จนหมดเวลารับเช็กชื่อ ${loginMode === 'pin' ? 'ระบบยังป้องกันด้วย PIN ของนักเรียนแต่ละคน และ ' : 'ระบบป้องกันด้วย '}1 เครื่อง = 1 คน (ติดธงถ้าซ้ำ)</p>
         <div class="row end"><button class="btn" type="button" id="qd-cancel">ยกเลิก</button><button class="btn primary" type="submit">สร้าง QR</button></div>
       </form>`);
     $('#qd-cancel').addEventListener('click', close);
@@ -302,7 +303,7 @@
       ev.preventDefault();
       const date = $('#qd-date').value;
       const body = {
-        room: $('#qd-room').value, subject: $('#qd-subject').value, mode: $('#qd-mode').value,
+        room: $('#qd-room').value, subject: $('#qd-subject').value, mode: $('#qd-app').checked ? 'qrapp' : 'image',
         label: slot ? slotLabel(slot) : 'นอกตารางสอน ' + $('#qd-start').value + ' น.', classLabel: slot ? slot.classLabel : '',
         start: `${date} ${$('#qd-start').value}`, onTimeMin: Number($('#qd-on').value), lateMin: Number($('#qd-late').value)
       };
@@ -317,8 +318,8 @@
           }
           if (r.existing) toast('คาบนี้มี QR อยู่แล้ว แสดงอันเดิม');
           close(); refreshGrid();
-          if (r.session.mode === 'image') showQrResult(r.session);
-          else { setRoom(r.session.room); openTab('checkin'); toast('เปิดคาบแล้ว ฉาย QR ได้เลย'); }
+          if (r.session.mode === 'rotate') { setRoom(r.session.room); openTab('checkin'); toast('คาบนี้เป็นแบบหมุนรหัสเดิม เปิดหน้าเช็กชื่อสดแล้ว'); }
+          else showQrResult(r.session);
         } catch (e) { fail(e); }
       });
     });
@@ -379,7 +380,7 @@
     for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (q.isDark(r, col)) g.fillRect(x0 + (col + 4) * cell, y0 + (r + 4) * cell, cell, cell);
     const yb = y0 + size + 90;
     text(`ตรงเวลาถึง ${thTime(s.onTimeUntil)} น. · รับเช็กชื่อถึง ${thTime(s.closeAt)} น.`, yb, 46, 700, '#12805c');
-    text('สแกนด้วยกล้องโทรศัพท์ แล้วเข้าสู่ระบบด้วยเลขประจำตัว' + (loginMode === 'pin' ? ' + PIN' : ''), yb + 62, 36, 400, '#475467');
+    text(s.app ? 'สแกนด้วยกล้อง หรือเปิดแอป NK EduTrack แล้วกด "เช็กชื่อ"' : 'สแกนด้วยกล้องโทรศัพท์ แล้วเข้าสู่ระบบด้วยเลขประจำตัว' + (loginMode === 'pin' ? ' + PIN' : ''), yb + 62, 36, 400, '#475467');
     text('ห้ามส่งรูปนี้ให้เพื่อนที่ไม่ได้อยู่ในห้องเรียน', yb + 112, 32, 400, '#c62d2d');
     try {
       const logo = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = siteBase() + 'img/logo.webp'; });

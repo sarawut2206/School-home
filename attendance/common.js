@@ -75,5 +75,24 @@
   const fmtNum = (n) => (Math.round(Number(n) * 100) / 100).toLocaleString('th-TH', { maximumFractionDigits: 2 });
   const siteBase = () => location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
 
+  // ───── แอปติดตั้งได้ (PWA) ─────
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* ใช้เว็บปกติต่อได้ */ }); });
+  }
+  (function installButton() {
+    const btn = document.getElementById('install-app');
+    const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (!btn || standalone) return;
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    let deferred = null;
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; btn.classList.remove('hidden'); });
+    window.addEventListener('appinstalled', () => { deferred = null; btn.classList.add('hidden'); });
+    if (ios) btn.classList.remove('hidden');
+    btn.addEventListener('click', async () => {
+      if (deferred) { deferred.prompt(); try { await deferred.userChoice; } catch (e) { /* ปิดหน้าต่างเฉยๆ */ } deferred = null; btn.classList.add('hidden'); }
+      else alert(ios ? 'ติดตั้งบน iPhone/iPad:\n1) แตะปุ่มแชร์ (สี่เหลี่ยมมีลูกศรชี้ขึ้น) ที่แถบล่างของ Safari\n2) เลือก "เพิ่มไปยังหน้าจอโฮม"\n3) กด "เพิ่ม"' : 'เปิดเมนูของเบราว์เซอร์ (⋮) แล้วเลือก "ติดตั้งแอป" หรือ "เพิ่มลงในหน้าจอหลัก"');
+    });
+  })();
+
   Object.assign(window, { $, $$, esc, store, uuid, deviceId, api, wait, thDate, thTime, thDateTime, todayStr, STATUS, badge, toast, busy, fmtNum, siteBase });
 })();

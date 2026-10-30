@@ -1,0 +1,18 @@
+{
+  "id": "student.html",
+  "name": "NK EduTrack · นักเรียน",
+  "short_name": "NK นักเรียน",
+  "description": "เช็กชื่อเข้าเรียน ส่งงานด้วยรูปถ่าย และดูคะแนนของตัวเอง",
+  "lang": "th",
+  "start_url": "student.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6fb",
+  "theme_color": "#3056d3",
+  "icons": [
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
