@@ -445,7 +445,7 @@
   async function renderAssign() {
     const el = $('#p-assign'), room = ensureRoom();
     el.innerHTML = `
-      <div class="card"><h2>${icon('assign')}มอบหมายงานใหม่</h2>
+      <div class="card"><div class="row"><h2 class="grow" style="margin:0">${icon('assign')}มอบหมายงานใหม่</h2><button class="btn sm" id="as-sample" type="button">${icon('file')}ดูตัวอย่างใบหลักฐานของนักเรียน</button></div>
         <form id="as-form"><div class="grid cols-2">
           <label class="field">ห้อง<select id="as-room">${roomOptions(room)}</select></label>
           <label class="field">ชื่องาน<input id="as-title" type="text" maxlength="80" required placeholder="เช่น ใบงานที่ 1 สมการ"></label>
@@ -456,6 +456,7 @@
           <label class="field" style="grid-column:1/-1">รายละเอียดใบงาน (นักเรียนเห็น และขึ้นบนใบหลักฐาน)<textarea id="as-desc" maxlength="600" placeholder="เช่น จงแก้สมการเชิงเส้นตัวแปรเดียว พร้อมแสดงวิธีทำอย่างละเอียด จำนวน 10 ข้อ"></textarea></label>
         </div><button class="btn primary" type="submit">${icon('plus')}สร้างงาน</button></form></div>
       <div class="card"><h2>${icon('book')}งานทั้งหมด</h2><div id="as-list" class="muted">กำลังโหลด…</div></div>`;
+    $('#as-sample').addEventListener('click', showSampleReceipt);
     const fillDefaults = async () => {
       try { if (!tb) tb = await T('t_timetable', {}); } catch (e) { return; }
       const rm = $('#as-room').value, slots = tb.slots.filter((x) => x.room === rm);
@@ -477,6 +478,30 @@
     });
     loadAssignments();
   }
+  // ตัวอย่างใบหลักฐานที่นักเรียนจะได้หลังส่งงาน (ข้อมูลสมมติ ไม่เกี่ยวกับนักเรียนจริง)
+  async function sampleSheet(no) {
+    const c = Object.assign(document.createElement('canvas'), { width: 900, height: 1200 }), g = c.getContext('2d');
+    g.fillStyle = '#fffef8'; g.fillRect(0, 0, 900, 1200);
+    g.strokeStyle = '#cfd8ea'; g.lineWidth = 2;
+    for (let y = 120; y < 1200; y += 62) { g.beginPath(); g.moveTo(0, y); g.lineTo(900, y); g.stroke(); }
+    g.strokeStyle = '#f0a3a3'; g.beginPath(); g.moveTo(90, 0); g.lineTo(90, 1200); g.stroke();
+    g.fillStyle = '#1d3b9f'; g.textBaseline = 'alphabetic';
+    const L = no === 1
+      ? ['ใบงานที่ 3 การแก้สมการ', 'ชื่อ นักเรียน ตัวอย่าง  เลขที่ 12  ม.4/2', '', '1) 2x + 5 = 11', '    2x = 11 - 5', '    2x = 6', '    x = 3   ตอบ', '', '2) 3(x - 2) = 9', '    x - 2 = 3', '    x = 5   ตอบ', '', '3) 4x - 7 = 2x + 5', '    2x = 12', '    x = 6   ตอบ']
+      : ['4) (x + 1)/2 = 7', '    x + 1 = 14', '    x = 13   ตอบ', '', '5) 5x = 3x + 18', '    2x = 18', '    x = 9   ตอบ', '', '6) 7 - x = 2', '    x = 5   ตอบ', '', '(ภาพตัวอย่าง ไม่ใช่งานจริง)'];
+    L.forEach((t, i) => { g.font = (i === 0 && no === 1 ? '700 36px' : '400 34px') + ' Sarabun, "Noto Sans Thai", sans-serif'; g.fillText(t, 110, 100 + i * 62 + 36); });
+    return Receipt.loadImage(c.toDataURL('image/jpeg', 0.85));
+  }
+  async function showSampleReceipt() {
+    const d = todayStr();
+    await Receipt.show({
+      sample: true,
+      receipt: { receiptId: 'SAMPLE-690000-00001', key: 'sample', round: 1, count: 2, late: false, submittedAt: d + ' 14:32:08', status: 'pending' },
+      assignment: { title: 'ใบงานที่ 3 การแก้สมการเชิงเส้นตัวแปรเดียว', description: 'จงแก้สมการพร้อมแสดงวิธีทำอย่างละเอียด จำนวน 10 ข้อ ถ่ายรูปหน้าที่เขียนวิธีทำแล้วส่ง', subject: 'คณิตศาสตร์', classLabel: '4.2', due: d + ' 16:00:00', maxScore: 10 },
+      student: { name: 'นักเรียน ตัวอย่าง', id: '00000', no: 12 }
+    }, async () => [await sampleSheet(1), await sampleSheet(2)]);
+  }
+
   async function loadAssignments() {
     try {
       const r = await T('t_assignments', {});
@@ -498,7 +523,7 @@
 
   // ═════════════ ตรวจงาน ═════════════
   let reviewSel = '';
-  let rv = { data: null, onlyPending: false, queue: [], i: 0 };
+  let rv = { data: null, onlyPending: false, queue: [], i: 0, sel: new Set() };
 
   async function renderReview() {
     const el = $('#p-review'), room = ensureRoom();
@@ -522,6 +547,7 @@
     const body = $('#rv-body'); if (!body) return;
     body.innerHTML = '<div class="card muted">กำลังโหลด…</div>';
     try { rv.data = await T('t_submissions', { assignmentId: reviewSel }); } catch (e) { fail(e); return; }
+    rv.sel = new Set();
     drawReview();
   }
   function drawReview() {
@@ -541,14 +567,34 @@
       <div class="small muted">ความคืบหน้าการส่งงาน ${list.length ? Math.round((list.length - cnt('missing')) / list.length * 1000) / 10 : 0}%</div>
       <div class="bar" style="margin:4px 0 10px"><i style="width:${list.length ? (list.length - cnt('missing')) / list.length * 100 : 0}%"></i></div>
       <p class="row">${badge('pending', 'รอตรวจ ' + cnt('pending'))}${badge('done', 'ครบถ้วน ' + cnt('done'))}${badge('revise', 'ต้องแก้ไข ' + cnt('revise'))}${badge('none', 'ไม่ผ่าน ' + cnt('none'))}${badge('missing', 'ยังไม่ส่ง ' + cnt('missing'))}</p>
-      <div class="scroll"><table><thead><tr><th>ชื่อ</th><th>สถานะ</th><th class="num">รูป</th><th class="num">คะแนน</th><th></th></tr></thead><tbody>${shown.map((s) => `<tr>
+      <div class="bulkbar"><div class="row"><button class="btn ok" id="bk-pending" type="button" ${cnt('pending') ? '' : 'disabled'}>${icon('checkCircle')}ครบถ้วนทั้งหมดที่รอตรวจ (${cnt('pending')})</button><span class="small muted grow">คลิกเดียวตรวจทุกคนที่รอตรวจเป็น "ครบถ้วน"</span></div>
+        <div class="row bk2"><span class="small grow" id="bk-count">หรือติ๊กเลือกรายคนในตาราง · เลือกแล้ว ${rv.sel.size} คน</span>
+        <button class="btn sm" data-bk="done" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('check')}ครบถ้วน</button><button class="btn sm" data-bk="revise" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('edit')}ต้องแก้ไข</button><button class="btn sm danger" data-bk="none" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('x')}ไม่ผ่าน</button></div></div>
+      <div class="scroll"><table><thead><tr><th style="width:2.5rem"><input type="checkbox" id="rv-selall" class="chk" aria-label="เลือกทั้งหมดที่ส่งแล้ว" ${shown.some((s) => s.submissionId) && shown.filter((s) => s.submissionId).every((s) => rv.sel.has(s.submissionId)) ? 'checked' : ''}></th><th>ชื่อ</th><th>สถานะ</th><th class="num">รูป</th><th class="num">คะแนน</th><th></th></tr></thead><tbody>${shown.map((s) => `<tr>
+        <td>${s.submissionId ? `<input type="checkbox" class="chk" data-sel="${esc(s.submissionId)}" ${rv.sel.has(s.submissionId) ? 'checked' : ''} aria-label="เลือก ${esc(s.name)}">` : ''}</td>
         <td>${esc(s.name)}<div class="small muted">${esc(s.studentId)}${s.submittedAt ? ' · ส่ง ' + esc(thDateTime(s.submittedAt)) : ''}${s.late ? ' · <b style="color:var(--bad)">ส่งช้า</b>' : ''}${s.round > 1 ? ' · รอบ ' + s.round : ''}</div></td>
         <td>${badge(s.status)}</td><td class="num">${s.count || ''}</td><td class="num">${s.score === null || s.status === 'missing' ? '' : fmtNum(s.score)}</td>
         <td>${s.count ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${esc(s.studentId)}" type="button">ดูรูป</button><button class="btn sm" data-rc="${esc(s.studentId)}" type="button">ใบหลักฐาน</button></div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#rv-only').addEventListener('change', (e) => { rv.onlyPending = e.target.checked; drawReview(); });
     $('#rv-start').addEventListener('click', () => openViewer(list.find((x) => x.status === 'pending').studentId, true));
+    $('#bk-pending').addEventListener('click', () => bulkGrade('done', { onlyPending: true, assignmentId: reviewSel }, cnt('pending')));
+    $$('[data-bk]', body).forEach((b) => b.addEventListener('click', () => bulkGrade(b.dataset.bk, { submissionIds: Array.from(rv.sel) }, rv.sel.size)));
+    $$('[data-sel]', body).forEach((c) => c.addEventListener('change', () => { if (c.checked) rv.sel.add(c.dataset.sel); else rv.sel.delete(c.dataset.sel); drawReview(); }));
+    $('#rv-selall').addEventListener('change', (e) => { shown.forEach((s) => { if (!s.submissionId) return; if (e.target.checked) rv.sel.add(s.submissionId); else rv.sel.delete(s.submissionId); }); drawReview(); });
     $$('[data-rc]', body).forEach((b) => b.addEventListener('click', () => openTeacherReceipt(b.dataset.rc)));
     $$('[data-open]', body).forEach((b) => b.addEventListener('click', () => openViewer(b.dataset.open, false)));
+  }
+
+  // ตรวจหลายคนในคลิกเดียว (ยืนยันก่อนบันทึก เพราะแก้ย้อนกลับต้องตรวจใหม่ทีละคน)
+  async function bulkGrade(status, scope, n) {
+    if (!n) return;
+    const max = rv.data.assignment.maxScore;
+    if (!confirm(`ตรวจ ${n} คน เป็น "${STATUS[status]}" ในครั้งเดียว?\n(${rv.data.assignment.title} · คะแนนเต็ม ${fmtNum(max)})\nแก้เป็นรายคนภายหลังได้`)) return;
+    try {
+      const r = await T('t_gradeMany', { status, ...scope });
+      toast(`ตรวจแล้ว ${r.graded} คน: ${STATUS[status]} คนละ ${fmtNum(r.score)} คะแนน`);
+      await loadReview();
+    } catch (e) { fail(e); }
   }
 
   async function openTeacherReceipt(studentId) {

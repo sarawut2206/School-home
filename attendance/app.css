@@ -208,3 +208,6 @@ button.g-btn:hover, button.g-btn:focus-visible { filter: brightness(.96); outlin
 @media (min-width: 1101px) { .card { padding: 1.5rem; } .bottomnav { left: 50%; right: auto; width: min(100%, 36rem); transform: translateX(-50%); border-radius: 14px 14px 0 0; border: 1px solid var(--line); border-bottom: 0; } }
 @media (min-width: 721px) { .top .wrap { min-height: 4rem; } .brand .bt b { font-size: 1.15rem; } }
 @media print { html { font-size: 12pt; } .top, .tabs, .bottomnav, #install-app { display: none !important; } }
+.bulkbar { display: grid; gap: .7rem; padding: .8rem; margin-bottom: .8rem; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--bg); }
+input.chk { width: 1.3rem; height: 1.3rem; accent-color: var(--brand); cursor: pointer; }
+.bulkbar .bk2 { padding-top: .7rem; border-top: 1px solid var(--line); }

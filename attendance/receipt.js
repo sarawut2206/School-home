@@ -157,6 +157,7 @@
     g.fillStyle = NAVY; g.fillRect(0, H - footerH, W, footerH);
     text(g, 'NK EduTrack • DIGITAL SUBMISSION RECEIPT', W / 2, H - footerH + 28, { size: 22, weight: 700, color: '#ffffff', align: 'center', spacing: 1 });
     text(g, 'ระบบบริหารจัดการการเข้าเรียนและการส่งงานนักเรียน', W / 2, H - footerH + 54, { size: 18, color: '#9db8f2', align: 'center' });
+    if (data.sample) { g.save(); g.translate(W / 2, H / 2 + 40); g.rotate(-0.5); text(g, 'ตัวอย่าง', 0, 0, { size: 260, weight: 700, color: 'rgba(220,38,38,.16)', align: 'center' }); g.restore(); }
     return c;
   }
 
