@@ -106,13 +106,22 @@
 
     // 03 ภาพหลักฐาน
     const footerH = 64, bottomH = 262, bottomY = H - footerH - 22 - bottomH;
-    section(g, y + 30, '03', 'ภาพหลักฐานงานที่ส่ง', 'SUBMITTED EVIDENCE');
+    section(g, y + 30, '03', 'หลักฐานงานที่ส่ง', 'SUBMITTED EVIDENCE');
     const areaTop = y + 56, areaBottom = bottomY - 66, n = images.length;
     const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.max(1, Math.ceil(n / cols)), gap = 18, cap = 34;
     const cw = (CW - gap * (cols - 1)) / cols, ch = (areaBottom - areaTop - gap * (rows - 1)) / rows;
     images.forEach((im, i) => {
       const x = M + (i % cols) * (cw + gap), yy = areaTop + Math.floor(i / cols) * (ch + gap), ih = ch - cap;
       g.fillStyle = '#f1f5f9'; rrect(g, x, yy, cw, ih, 14); g.fill();
+      if (im.pdf) {   // ไฟล์ PDF: วาดเป็นการ์ดมีป้าย PDF และชื่อไฟล์ (ไม่ได้แปลงเนื้อหาเป็นภาพ)
+        const bw = Math.min(150, cw * 0.5), bh = bw * 0.72, bx = x + (cw - bw) / 2, by = yy + ih / 2 - bh / 2 - 14;
+        g.fillStyle = '#dc2626'; rrect(g, bx, by, bw, bh, 12); g.fill();
+        text(g, 'PDF', bx + bw / 2, by + bh / 2 + bw * 0.13, { size: Math.round(bw * 0.38), weight: 700, color: '#ffffff', align: 'center' });
+        if (im.name) text(g, im.name, x + cw / 2, by + bh + 44, { size: 22, color: '#1e293b', align: 'center', maxW: cw - 24 });
+        g.strokeStyle = LINE; g.lineWidth = 2; rrect(g, x, yy, cw, ih, 14); g.stroke();
+        text(g, `ไฟล์ที่ ${i + 1} (PDF)`, x + cw / 2, yy + ih + 26, { size: 21, color: GRAY, align: 'center' });
+        return;
+      }
       g.save(); rrect(g, x, yy, cw, ih, 14); g.clip();
       const k = Math.min(cw / im.naturalWidth, ih / im.naturalHeight), dw = im.naturalWidth * k, dh = im.naturalHeight * k;
       g.drawImage(im, x + (cw - dw) / 2, yy + (ih - dh) / 2, dw, dh);
@@ -120,7 +129,7 @@
       g.strokeStyle = LINE; g.lineWidth = 2; rrect(g, x, yy, cw, ih, 14); g.stroke();
       text(g, `ภาพที่ ${i + 1}`, x + cw / 2, yy + ih + 26, { size: 21, color: GRAY, align: 'center' });
     });
-    text(g, `จำนวนไฟล์ที่ส่ง: ${rc.count} ภาพ${rc.round > 1 ? ' · ส่งครั้งที่ ' + rc.round : ''}`, M, bottomY - 30, { size: 21, color: GRAY });
+    text(g, `จำนวนไฟล์ที่ส่ง: ${rc.count} ไฟล์${rc.round > 1 ? ' · ส่งครั้งที่ ' + rc.round : ''}`, M, bottomY - 30, { size: 21, color: GRAY });
 
     // 04 ข้อมูลยืนยันการส่ง (ซ้าย) | 05 การตรวจสอบหลักฐาน (ขวา)
     const lw = 640;
@@ -225,11 +234,14 @@
   }
 
   // โหลดรูปจากเซิร์ฟเวอร์เป็น HTMLImageElement (ใช้ fetchFn(fileId) → {mime, data})
-  async function imagesFromServer(ids, fetchFn, onProgress) {
+  // meta (ไม่บังคับ) = data.fileMeta: ไฟล์ที่เป็น PDF ไม่ต้องดาวน์โหลด คืนเป็นป้าย {pdf, name}
+  async function imagesFromServer(ids, fetchFn, onProgress, meta) {
     const out = new Array(ids.length); let done = 0, next = 0;
     async function worker() {
       while (next < ids.length) {
         const i = next++;
+        const m = meta && meta[i];
+        if (m && m.mime === 'application/pdf') { out[i] = { pdf: true, name: m.name || '' }; onProgress && onProgress(++done, ids.length); continue; }
         let src = imgCache.get(ids[i]);
         if (!src) { const r = await fetchFn(ids[i]); src = `data:${r.mime};base64,${r.data}`; imgCache.set(ids[i], src); }
         out[i] = await loadImage(src); onProgress && onProgress(++done, ids.length);

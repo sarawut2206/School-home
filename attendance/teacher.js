@@ -570,11 +570,11 @@
       <div class="bulkbar"><div class="row"><button class="btn ok" id="bk-pending" type="button" ${cnt('pending') ? '' : 'disabled'}>${icon('checkCircle')}ครบถ้วนทั้งหมดที่รอตรวจ (${cnt('pending')})</button><span class="small muted grow">คลิกเดียวตรวจทุกคนที่รอตรวจเป็น "ครบถ้วน"</span></div>
         <div class="row bk2"><span class="small grow" id="bk-count">หรือติ๊กเลือกรายคนในตาราง · เลือกแล้ว ${rv.sel.size} คน</span>
         <button class="btn sm" data-bk="done" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('check')}ครบถ้วน</button><button class="btn sm" data-bk="revise" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('edit')}ต้องแก้ไข</button><button class="btn sm danger" data-bk="none" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('x')}ไม่ผ่าน</button></div></div>
-      <div class="scroll"><table><thead><tr><th style="width:2.5rem"><input type="checkbox" id="rv-selall" class="chk" aria-label="เลือกทั้งหมดที่ส่งแล้ว" ${shown.some((s) => s.submissionId) && shown.filter((s) => s.submissionId).every((s) => rv.sel.has(s.submissionId)) ? 'checked' : ''}></th><th>ชื่อ</th><th>สถานะ</th><th class="num">รูป</th><th class="num">คะแนน</th><th></th></tr></thead><tbody>${shown.map((s) => `<tr>
+      <div class="scroll"><table><thead><tr><th style="width:2.5rem"><input type="checkbox" id="rv-selall" class="chk" aria-label="เลือกทั้งหมดที่ส่งแล้ว" ${shown.some((s) => s.submissionId) && shown.filter((s) => s.submissionId).every((s) => rv.sel.has(s.submissionId)) ? 'checked' : ''}></th><th>ชื่อ</th><th>สถานะ</th><th class="num">ไฟล์</th><th class="num">คะแนน</th><th></th></tr></thead><tbody>${shown.map((s) => `<tr>
         <td>${s.submissionId ? `<input type="checkbox" class="chk" data-sel="${esc(s.submissionId)}" ${rv.sel.has(s.submissionId) ? 'checked' : ''} aria-label="เลือก ${esc(s.name)}">` : ''}</td>
         <td>${esc(s.name)}<div class="small muted">${esc(s.studentId)}${s.submittedAt ? ' · ส่ง ' + esc(thDateTime(s.submittedAt)) : ''}${s.late ? ' · <b style="color:var(--bad)">ส่งช้า</b>' : ''}${s.round > 1 ? ' · รอบ ' + s.round : ''}</div></td>
         <td>${badge(s.status)}</td><td class="num">${s.count || ''}</td><td class="num">${s.score === null || s.status === 'missing' ? '' : fmtNum(s.score)}</td>
-        <td>${s.count ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${esc(s.studentId)}" type="button">ดูรูป</button><button class="btn sm" data-rc="${esc(s.studentId)}" type="button">ใบหลักฐาน</button></div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+        <td>${s.count ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${esc(s.studentId)}" type="button">ดูไฟล์</button><button class="btn sm" data-rc="${esc(s.studentId)}" type="button">ใบหลักฐาน</button></div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#rv-only').addEventListener('change', (e) => { rv.onlyPending = e.target.checked; drawReview(); });
     $('#rv-start').addEventListener('click', () => openViewer(list.find((x) => x.status === 'pending').studentId, true));
     $('#bk-pending').addEventListener('click', () => bulkGrade('done', { onlyPending: true, assignmentId: reviewSel }, cnt('pending')));
@@ -600,7 +600,7 @@
   async function openTeacherReceipt(studentId) {
     try {
       const d = await T('t_receipt', { assignmentId: reviewSel, studentId });
-      await Receipt.show(d, (dd, prog) => Receipt.imagesFromServer(dd.files, (fid) => T('t_image', { fileId: fid }), prog));
+      await Receipt.show(d, (dd, prog) => Receipt.imagesFromServer(dd.files, (fid) => T('t_image', { fileId: fid }), prog, dd.fileMeta));
     } catch (e) { fail(e); }
   }
 
@@ -629,13 +629,30 @@
     } catch (e) { img.replaceWith(Object.assign(document.createElement('p'), { textContent: 'โหลดรูปไม่สำเร็จ', className: 'muted' })); }
   }
 
+  // PDF: ดึงไฟล์จากเซิร์ฟเวอร์เป็น blob แล้วฝังดู (มือถือบางรุ่นฝังไม่ได้ จึงมีปุ่มเปิดในแท็บใหม่/ดาวน์โหลดคู่กัน)
+  const pdfCache = new Map();
+  async function loadPdf(a, frame) {
+    try {
+      let url = pdfCache.get(a.dataset.pdf);
+      if (!url) {
+        const r = await T('t_image', { fileId: a.dataset.pdf });
+        const bin = atob(r.data), u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' })); pdfCache.set(a.dataset.pdf, url);
+      }
+      a.href = url; frame.src = url;
+    } catch (e) { frame.replaceWith(Object.assign(document.createElement('p'), { textContent: 'โหลด PDF ไม่สำเร็จ', className: 'muted' })); }
+  }
+
   function drawViewer() {
     const s = rv.queue[rv.i], a = rv.data.assignment;
     $('#modal-root').innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="ตรวจงาน ${esc(s.name)}"><div class="panel viewer">
       <div class="row"><div class="grow"><b>${esc(s.name)}</b> <span class="muted small">${esc(s.studentId)} · ${rv.i + 1}/${rv.queue.length}</span>
-        <div class="small muted">ส่ง ${esc(thDateTime(s.submittedAt))}${s.late ? ' · ส่งช้า' : ''} · รอบ ${s.round} · ${s.count} รูป</div></div>
+        <div class="small muted">ส่ง ${esc(thDateTime(s.submittedAt))}${s.late ? ' · ส่งช้า' : ''} · รอบ ${s.round} · ${s.count} ไฟล์</div></div>
         ${badge(s.status)}<button class="btn sm" id="vw-close" type="button">ปิด (Esc)</button></div>
-      <div id="vw-imgs" class="grid">${s.files.map((f, i) => `<div><div class="small muted">รูปที่ ${i + 1}${f.round > 1 ? ' (รอบ ' + f.round + ')' : ''}</div><img class="muted" alt="งานของ ${esc(s.name)} รูปที่ ${i + 1}" data-f="${esc(f.id)}" style="min-height:80px"></div>`).join('')}</div>
+      <div id="vw-imgs" class="grid">${s.files.map((f, i) => f.mime === 'application/pdf'
+        ? `<div class="pdfbox"><div class="small muted">ไฟล์ที่ ${i + 1} (PDF)${f.round > 1 ? ' (รอบ ' + f.round + ')' : ''}</div><div class="row"><b class="grow small">${icon('file')} ${esc(f.orig || 'เอกสาร.pdf')}</b><a class="btn sm primary" data-pdf="${esc(f.id)}" href="#" target="_blank" rel="noopener">เปิด/ดาวน์โหลด PDF</a></div><iframe class="pdfview" title="PDF ของ ${esc(s.name)} ไฟล์ที่ ${i + 1}" data-pdfview="${esc(f.id)}"></iframe></div>`
+        : `<div><div class="small muted">รูปที่ ${i + 1}${f.round > 1 ? ' (รอบ ' + f.round + ')' : ''}</div><img class="muted" alt="งานของ ${esc(s.name)} รูปที่ ${i + 1}" data-f="${esc(f.id)}" style="min-height:80px"></div>`).join('')}</div>
       <div class="gradebar"><label class="field" style="margin:0">ข้อความถึงนักเรียน (ไม่บังคับ)<input id="vw-comment" type="text" maxlength="300" value="${esc(s.comment)}" placeholder="เช่น ข้อ 3 ลืมใส่หน่วย"></label>
       <div class="row">
         <button class="btn ok grow" data-g="done" type="button">${icon('check')} ครบถ้วน (${fmtNum(a.maxScore)}) [1]</button>
@@ -643,6 +660,7 @@
         <button class="btn danger grow" data-g="none" type="button">${icon('x')} ไม่ผ่าน (0) [3]</button></div>
       <div class="row end"><button class="btn sm" id="vw-prev" type="button" ${rv.i === 0 ? 'disabled' : ''}>${icon('back')} ก่อนหน้า</button><button class="btn sm" id="vw-next" type="button" ${rv.i === rv.queue.length - 1 ? 'disabled' : ''}>ถัดไป ${icon('next')}</button></div></div>
     </div></div>`;
+    $$('#vw-imgs [data-pdf]').forEach((a) => loadPdf(a, $('#vw-imgs [data-pdfview="' + a.dataset.pdf + '"]')));
     $$('#vw-imgs img').forEach((img) => { loadImg(img, img.dataset.f); img.addEventListener('click', () => img.style.maxHeight = img.style.maxHeight === 'none' ? '' : 'none'); });
     $('#vw-close').addEventListener('click', closeViewer);
     $('#vw-prev').addEventListener('click', () => go(-1)); $('#vw-next').addEventListener('click', () => go(1));

@@ -213,7 +213,7 @@
       return `<div class="card"><div class="row"><div class="grow"><h3>${esc(a.title)}</h3>
         <div class="small muted">คะแนนเต็ม ${fmtNum(a.maxScore)}${a.due ? ' · กำหนดส่ง ' + esc(thDateTime(a.due)) : ''}${a.status === 'closed' ? ' · ปิดรับแล้ว' : ''}</div></div>
         ${badge(st)}</div>
-        ${m ? `<p class="small" style="margin-top:8px">ส่งแล้ว ${m.count} รูป · รอบที่ ${m.round}${score}${m.late ? ' · ส่งช้า' : ''}</p>` : ''}
+        ${m ? `<p class="small" style="margin-top:8px">ส่งแล้ว ${m.count} ไฟล์ · รอบที่ ${m.round}${score}${m.late ? ' · ส่งช้า' : ''}</p>` : ''}
         ${a.description ? `<p class="small" style="white-space:pre-wrap;margin-top:8px">${esc(a.description)}</p>` : ''}
         ${m && m.comment ? `<p class="small"><b>ครูเขียนว่า:</b> ${esc(m.comment)}</p>` : ''}
         ${a.receipts && a.receipts.length ? `<div class="row" style="margin:8px 0">${a.receipts.map((r) => `<button class="btn sm" data-rc="${esc(r.receiptId)}" type="button">${icon('file')} ใบหลักฐาน ครั้งที่ ${r.round}</button>`).join('')}</div>` : ''}
@@ -238,10 +238,12 @@
         <div class="row">
           <label class="btn primary grow" for="cam">${icon('camera')} ถ่ายรูป</label>
           <label class="btn grow" for="pick">${icon('image')} เลือกรูป</label>
+          <label class="btn grow" for="pdf">${icon('file')} แนบ PDF</label>
         </div>
         <input id="cam" type="file" accept="image/*" capture="environment" class="hidden">
         <input id="pick" type="file" accept="image/*" multiple class="hidden">
-        <p class="small muted" style="margin-top:8px">ถ่ายให้เห็นตัวหนังสือชัด แสงพอ เห็นทั้งหน้า ส่งได้หลายรูป (เรียงตามหน้า)</p>
+        <input id="pdf" type="file" accept="application/pdf,.pdf" multiple class="hidden">
+        <p class="small muted" style="margin-top:8px">ถ่ายให้เห็นตัวหนังสือชัด แสงพอ เห็นทั้งหน้า ส่งได้หลายรูป (เรียงตามหน้า) หรือแนบไฟล์ <b>PDF</b> (ไม่เกิน 5 MB ต่อไฟล์) รวมกันไม่เกิน 8 ไฟล์ต่อครั้ง</p>
         <div class="thumbs" id="thumbs" aria-live="polite"></div>
         <div id="progress" class="hidden"><div class="bar"><i style="width:0"></i></div><p class="small center" id="progress-text"></p></div>
         <button class="btn ok block" id="sub-send" type="button" disabled>${icon('send')}ส่งงาน</button>
@@ -249,6 +251,7 @@
     $('#sub-back').addEventListener('click', () => { if (photos.length && !confirm('ยกเลิกรูปที่เลือกไว้?')) return; activeAsg = null; photos = []; renderSubmit(); });
     $('#cam').addEventListener('change', (e) => addFiles(e.target.files));
     $('#pick').addEventListener('change', (e) => addFiles(e.target.files));
+    $('#pdf').addEventListener('change', (e) => addFiles(e.target.files));
     $('#sub-send').addEventListener('click', send);
     drawThumbs();
   }
@@ -256,21 +259,33 @@
   async function addFiles(files) {
     const max = 8;
     for (const f of Array.from(files)) {
-      if (photos.length >= max) { toast(`ส่งได้ไม่เกิน ${max} รูปต่อครั้ง`, true); break; }
-      try { photos.push(await compress(f)); }
-      catch (e) { toast('เปิดรูปนี้ไม่ได้ ลองถ่ายใหม่หรือเลือกไฟล์ JPG/PNG', true); }
+      if (photos.length >= max) { toast(`ส่งได้ไม่เกิน ${max} ไฟล์ต่อครั้ง`, true); break; }
+      try { photos.push(isPdf(f) ? await readPdf(f) : await compress(f)); }
+      catch (e) { toast(e.pdfMsg || 'เปิดรูปนี้ไม่ได้ ลองถ่ายใหม่หรือเลือกไฟล์ JPG/PNG', true); }
     }
-    $('#cam').value = ''; $('#pick').value = '';
+    $('#cam').value = ''; $('#pick').value = ''; $('#pdf').value = '';
     drawThumbs();
+  }
+
+  const MAX_PDF = 5 * 1024 * 1024;
+  const isPdf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+  // PDF ส่งทั้งไฟล์ตามเดิม (ไม่ย่อ) จึงจำกัดขนาด และเช็กหัวไฟล์ %PDF- กันไฟล์เสียหรือเปลี่ยนนามสกุล
+  async function readPdf(file) {
+    const bad = (m) => Object.assign(new Error('pdf'), { pdfMsg: m });
+    if (file.size > MAX_PDF) throw bad(`${file.name} ใหญ่เกิน 5 MB (${(file.size / 1048576).toFixed(1)} MB) ลองลดขนาดไฟล์หรือถ่ายรูปส่งแทน`);
+    const buf = new Uint8Array(await file.arrayBuffer());
+    if (String.fromCharCode(...buf.slice(0, 5)) !== '%PDF-') throw bad(`${file.name} ไม่ใช่ไฟล์ PDF ที่ถูกต้อง`);
+    const b64 = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(file); });
+    return { pdf: true, name: file.name, b64, url: URL.createObjectURL(file), size: file.size };
   }
 
   function drawThumbs() {
     const box = $('#thumbs'); if (!box) return;
-    box.innerHTML = photos.map((p, i) => `<div class="thumb"><img src="${p.url}" alt="รูปที่ ${i + 1}"><button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}">${icon('x')}</button></div>`).join('');
+    box.innerHTML = photos.map((p, i) => `<div class="thumb${p.pdf ? ' pdf' : ''}">${p.pdf ? `<div class="pdftile"><b>PDF</b><span>${esc(p.name)}</span><small>${p.size >= 1048576 ? (p.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(p.size / 1024)) + ' KB'}</small></div>` : `<img src="${p.url}" alt="รูปที่ ${i + 1}">`}<button type="button" data-rm="${i}" aria-label="ลบไฟล์ที่ ${i + 1}">${icon('x')}</button></div>`).join('');
     $$('[data-rm]', box).forEach((b) => b.addEventListener('click', () => { URL.revokeObjectURL(photos[b.dataset.rm].url); photos.splice(b.dataset.rm, 1); batchId = null; drawThumbs(); }));
     const send = $('#sub-send');
     send.disabled = !photos.length;
-    send.innerHTML = icon('send') + (photos.length ? `ส่งงาน (${photos.length} รูป)` : 'ส่งงาน');
+    send.innerHTML = icon('send') + (photos.length ? `ส่งงาน (${photos.length} ไฟล์)` : 'ส่งงาน');
   }
 
   async function compress(file) {
@@ -297,34 +312,34 @@
     batchId = batchId || uuid();
     const bar = $('#progress'), fill = $('#progress i'), txt = $('#progress-text');
     btn.disabled = true; bar.classList.remove('hidden');
-    $('#cam').disabled = true; $('#pick').disabled = true;
+    $('#cam').disabled = true; $('#pick').disabled = true; $('#pdf').disabled = true;
     try {
       for (let i = 0; i < total; i++) {
-        txt.textContent = `กำลังส่งรูปที่ ${i + 1} จาก ${total} … อย่าปิดหน้านี้`;
+        txt.textContent = `กำลังส่งไฟล์ที่ ${i + 1} จาก ${total} … อย่าปิดหน้านี้`;
         fill.style.width = (i / total * 100) + '%';
-        await api('submitImage', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, idx: i, data: photos[i].b64 }, { tries: 4 });
+        await api('submitImage', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, idx: i, data: photos[i].b64, ...(photos[i].pdf ? { mime: 'application/pdf', name: photos[i].name } : {}) }, { tries: 4 });
       }
       fill.style.width = '100%'; txt.textContent = 'กำลังออกใบหลักฐาน…';
       const receipt = await api('submitFinish', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, count: total }, { tries: 4 });
-      const title = activeAsg.title, urls = photos.map((p) => p.url);
+      const title = activeAsg.title, urls = photos.map((p) => p.url), pdfs = photos.map((p) => p.pdf ? { pdf: true, name: p.name } : null);
       photos = []; activeAsg = null; batchId = null;
       await refresh();
       switchTab('submit');
-      $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">${icon('checkCircle')}</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} รูป · เลขที่ ${esc(receipt.receipt.receiptId)}</p></div>`);
+      $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">${icon('checkCircle')}</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} ไฟล์ · เลขที่ ${esc(receipt.receipt.receiptId)}</p></div>`);
       window.scrollTo({ top: 0 });
-      await Receipt.show(receipt, () => Promise.all(urls.map(Receipt.loadImage)));
+      await Receipt.show(receipt, () => Promise.all(urls.map((u, i) => pdfs[i] || Receipt.loadImage(u))));
       urls.forEach((u) => URL.revokeObjectURL(u));
     } catch (e) {
       if (authLost(e)) return;
-      toast((e.message || 'ส่งไม่สำเร็จ') + ' (รูปที่เลือกยังอยู่ กดส่งอีกครั้งได้)', true);
-      $('#cam').disabled = false; $('#pick').disabled = false; btn.disabled = false; bar.classList.add('hidden');
+      toast((e.message || 'ส่งไม่สำเร็จ') + ' (ไฟล์ที่เลือกยังอยู่ กดส่งอีกครั้งได้)', true);
+      $('#cam').disabled = false; $('#pick').disabled = false; $('#pdf').disabled = false; btn.disabled = false; bar.classList.add('hidden');
     }
   }
 
   async function openReceipt(id) {
     try {
       const data = await api('myReceipt', { token: session.token, receiptId: id });
-      await Receipt.show(data, (d, prog) => Receipt.imagesFromServer(d.files, (fid) => api('myImage', { token: session.token, fileId: fid }), prog));
+      await Receipt.show(data, (d, prog) => Receipt.imagesFromServer(d.files, (fid) => api('myImage', { token: session.token, fileId: fid }), prog, d.fileMeta));
     } catch (e) { if (!authLost(e)) toast(e.message, true); }
   }
 
