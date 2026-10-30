@@ -33,13 +33,15 @@
 
   <section id="view-app" class="wrap hidden">
     <div class="tabs" role="tablist" id="tabs">
-      <button class="tab" role="tab" data-tab="checkin" aria-selected="true">เช็กชื่อ</button>
+      <button class="tab" role="tab" data-tab="timetable" aria-selected="true">ตารางสอน · สร้าง QR</button>
+      <button class="tab" role="tab" data-tab="checkin" aria-selected="false">เช็กชื่อสด</button>
       <button class="tab" role="tab" data-tab="assign" aria-selected="false">มอบหมายงาน</button>
       <button class="tab" role="tab" data-tab="review" aria-selected="false">ตรวจงาน</button>
       <button class="tab" role="tab" data-tab="report" aria-selected="false">คะแนนและรายงาน</button>
       <button class="tab" role="tab" data-tab="settings" aria-selected="false">นักเรียนและตั้งค่า</button>
     </div>
-    <div id="p-checkin" role="tabpanel"></div>
+    <div id="p-timetable" role="tabpanel"></div>
+    <div id="p-checkin" role="tabpanel" class="hidden"></div>
     <div id="p-assign" role="tabpanel" class="hidden"></div>
     <div id="p-review" role="tabpanel" class="hidden"></div>
     <div id="p-report" role="tabpanel" class="hidden"></div>

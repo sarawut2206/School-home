@@ -2,7 +2,7 @@
 (function () {
   let tt = store.get('tt', 'session');
   let rooms = [];
-  const state = { room: store.get('room') || '', tab: 'checkin' };
+  const state = { room: store.get('room') || '', tab: 'timetable' };
   const live = { sid: null, timers: [], nextAt: 0, token: '', fetching: false, lastKey: '' };
   const imgCache = new Map();
 
@@ -26,19 +26,19 @@
       try {
         const r = await api('t_login', { pass: $('#pass').value });
         tt = r.tt; rooms = r.rooms; store.set('tt', tt, 'session'); $('#pass').value = '';
-        ensureRoom(); show('app'); openTab('checkin');
+        ensureRoom(); show('app'); openTab('timetable');
       } catch (e) { fail(e); }
     });
   });
 
   // ───── แท็บ ─────
-  const PANELS = ['checkin', 'assign', 'review', 'report', 'settings'];
+  const PANELS = ['timetable', 'checkin', 'assign', 'review', 'report', 'settings'];
   function openTab(name) {
     if (name !== 'checkin') stopLive();
     state.tab = name;
     $$('#tabs .tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
     PANELS.forEach((p) => $('#p-' + p).classList.toggle('hidden', p !== name));
-    ({ checkin: renderCheckin, assign: renderAssign, review: renderReview, report: renderReport, settings: renderSettings })[name]();
+    ({ timetable: renderTimetable, checkin: renderCheckin, assign: renderAssign, review: renderReview, report: renderReport, settings: renderSettings })[name]();
   }
   $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) openTab(b.dataset.tab); });
 
@@ -160,6 +160,243 @@
     box.innerHTML = q.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { pollStatus(true); if (live.sid) tick(); } });
+
+  // ═════════════ ตารางสอน + สร้าง QR ═════════════
+  const DAYS = ['', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
+  let tb = null;     // { periods, slots, rooms }
+  let cfgVals = null;
+  const appCfg = window.APP_CONFIG || {};
+  const classText = (c) => { const m = String(c || '').match(/^(\d+)[./](\d+)$/); return m ? `ม.${m[1]}/${m[2]}` : String(c || ''); };
+  const dowOf = (dateStr) => { const d = new Date(dateStr + 'T12:00:00Z').getUTCDay(); return d === 0 ? 7 : d; };
+  const nowHM = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
+  const per = (n) => (tb.periods.find((p) => p.period === n) || {});
+  const slotStart = (s) => per(s.startPeriod).start || '08:00';
+  const slotEnd = (s) => per(s.endPeriod).end || '09:00';
+  const slotLabel = (s) => `คาบ ${s.startPeriod}${s.endPeriod !== s.startPeriod ? '–' + s.endPeriod : ''} · ${slotStart(s)}–${slotEnd(s)} น.`;
+
+  function openModal(inner) {
+    const root = $('#modal-root');
+    root.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><div class="panel">${inner}</div></div>`;
+    const close = () => { root.innerHTML = ''; document.removeEventListener('keydown', esc2); };
+    const esc2 = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', esc2);
+    root.firstChild.addEventListener('mousedown', (e) => { if (e.target === root.firstChild) close(); });
+    return close;
+  }
+
+  async function renderTimetable() {
+    const el = $('#p-timetable');
+    el.innerHTML = '<div class="card muted">กำลังโหลดตารางสอน…</div>';
+    let sess = [];
+    try {
+      tb = await T('t_timetable', {}); rooms = tb.rooms;
+      sess = (await T('t_sessions', {})).sessions.filter((s) => s.date === todayStr());
+    } catch (e) { fail(e); return; }
+    const dow = dowOf(todayStr()), now = nowHM();
+    const days = [1, 2, 3, 4, 5].concat([6, 7].filter((d) => tb.slots.some((s) => s.day === d)));
+    el.innerHTML = `
+      <div class="card"><div class="row"><div class="grow"><h2 style="margin:0">ตารางสอน</h2>
+        <div class="small muted">วันนี้ วัน${DAYS[dow]}ที่ ${esc(thDate(todayStr()))} · กด "สร้าง QR" ที่คาบที่จะสอน แล้วบันทึกรูปส่งให้นักเรียน</div></div>
+        <button class="btn" id="tt-adhoc" type="button">QR นอกตาราง</button>
+        <button class="btn" id="tt-add" type="button">+ เพิ่มคาบ</button>
+        <button class="btn" id="tt-periods" type="button">ตั้งเวลาคาบ</button></div></div>
+      ${days.map((d) => {
+        const list = tb.slots.map((s, i) => ({ s, i })).filter((x) => x.s.day === d);
+        return `<div class="card"><h3>วัน${DAYS[d]} ${d === dow ? badge('present', 'วันนี้') : ''}</h3>
+          ${list.length ? list.map(({ s, i }) => {
+            const isNow = d === dow && slotStart(s) <= now && now < slotEnd(s);
+            const ses = d === dow && s.room ? sess.find((x) => x.room === s.room && x.label === slotLabel(s)) : null;
+            return `<div class="slot ${isNow ? 'now' : ''} ${s.room ? '' : 'plain'}">
+              <div class="slot-time"><b>${s.startPeriod}${s.endPeriod !== s.startPeriod ? '–' + s.endPeriod : ''}</b><span>${esc(slotStart(s))}–${esc(slotEnd(s))}</span></div>
+              <div class="grow"><b>${esc(s.subject)}</b> ${s.classLabel ? esc(classText(s.classLabel)) : ''}
+                <div class="small muted">${s.place ? 'ห้องเรียน ' + esc(s.place) : ''}${s.note ? ' · ' + esc(s.note) : ''}${isNow ? ' · กำลังเรียนอยู่' : ''}${ses ? ' · ' + (ses.status === 'open' ? 'เปิดเช็กชื่ออยู่' : 'เช็กชื่อแล้ว') + ' ' + ses.present + ' คน' : ''}</div></div>
+              ${s.room ? `<button class="btn sm ${ses ? '' : 'primary'}" data-act="${ses ? 'view' : 'qr'}" data-i="${i}" ${ses ? `data-sid="${esc(ses.sessionId)}"` : ''} type="button">${ses ? 'ดู QR / รายชื่อ' : 'สร้าง QR'}</button>` : ''}
+              <button class="btn sm" data-act="edit" data-i="${i}" type="button">แก้ไข</button></div>`;
+          }).join('') : '<p class="muted small" style="margin:0">ไม่มีคาบสอน</p>'}</div>`;
+      }).join('')}`;
+    $('#tt-adhoc').addEventListener('click', () => openQrDialog(null));
+    $('#tt-add').addEventListener('click', () => openSlotDialog(null));
+    $('#tt-periods').addEventListener('click', openPeriodsDialog);
+    $$('[data-act]', el).forEach((b) => b.addEventListener('click', () => {
+      const s = tb.slots[Number(b.dataset.i)];
+      if (b.dataset.act === 'qr') openQrDialog(s);
+      else if (b.dataset.act === 'edit') openSlotDialog(Number(b.dataset.i));
+      else openExisting(b.dataset.sid, s.room);
+    }));
+  }
+
+  async function openExisting(sid, room) {
+    try {
+      const st = await T('t_sessionStatus', { sessionId: sid });
+      if (st.session.status === 'open' && st.session.mode === 'image') return showQrResult(st.session);
+    } catch (e) { fail(e); return; }
+    setRoom(room); openTab('checkin');
+  }
+
+  async function getCfg() {
+    if (cfgVals) return cfgVals;
+    try { cfgVals = {}; (await T('t_config', {})).config.forEach((c) => { cfgVals[c.key] = c.value; }); } catch (e) { cfgVals = {}; }
+    return cfgVals;
+  }
+
+  async function openQrDialog(slot) {
+    const cfg = await getCfg();
+    const hasRoom = slot && rooms.some((r) => r.room === slot.room);
+    const room = hasRoom ? slot.room : ensureRoom();
+    const start = slot ? slotStart(slot) : nowHM();
+    const close = openModal(`
+      <h2>${slot ? 'สร้าง QR เช็กชื่อ' : 'สร้าง QR นอกตารางสอน'}</h2>
+      ${slot ? `<p class="muted small">${esc(slot.subject)} ${esc(classText(slot.classLabel))} · ${esc(slotLabel(slot))}</p>` : ''}
+      <form id="qd">
+        <div class="grid cols-2">
+          <label class="field">ห้องเรียนในระบบ<select id="qd-room">${roomOptions(room)}</select></label>
+          <label class="field">วิชา / รหัสวิชา<input id="qd-subject" type="text" maxlength="60" value="${esc(slot ? slot.subject : store.get('subject') || '')}" required></label>
+          <label class="field">เวลาเริ่มคาบ<input id="qd-start" type="time" value="${esc(start)}" required><span class="hint">คนที่เช็กชื่อหลังเวลานี้เกินที่กำหนดจะนับ "สาย"</span></label>
+          <label class="field">ตรงเวลาภายใน (นาที)<input id="qd-on" type="number" min="0" max="120" value="${esc(cfg.onTimeMin ?? 10)}"></label>
+          <label class="field">รับเช็กชื่อถึง (นาทีหลังเริ่ม)<input id="qd-late" type="number" min="5" max="240" value="${esc(cfg.lateMin ?? 30)}"><span class="hint">หลังจากนี้สแกนไม่ได้ ต้องให้ครูบันทึกให้</span></label>
+          <label class="field">รูปแบบ QR<select id="qd-mode">
+            <option value="image">รูปภาพ ส่งให้นักเรียนได้</option>
+            <option value="rotate">ฉายหน้าจอ รหัสหมุนทุก 45 วินาที</option></select></label>
+        </div>
+        <p class="small muted" id="qd-hint">รูปภาพส่งต่อได้ จึงเหมาะกับการส่งใน LINE กลุ่มห้อง ระบบยังป้องกันด้วย PIN ของนักเรียนแต่ละคน, 1 เครื่อง = 1 คน (ติดธงถ้าซ้ำ) และหมดอายุตามเวลารับเช็กชื่อ</p>
+        <div class="row end"><button class="btn" type="button" id="qd-cancel">ยกเลิก</button><button class="btn primary" type="submit">สร้าง QR</button></div>
+      </form>`);
+    $('#qd-cancel').addEventListener('click', close);
+    $('#qd').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const body = {
+        room: $('#qd-room').value, subject: $('#qd-subject').value, mode: $('#qd-mode').value,
+        label: slot ? slotLabel(slot) : 'นอกตารางสอน ' + $('#qd-start').value + ' น.', classLabel: slot ? slot.classLabel : '',
+        start: `${todayStr()} ${$('#qd-start').value}`, onTimeMin: Number($('#qd-on').value), lateMin: Number($('#qd-late').value)
+      };
+      if (!slot) store.set('subject', body.subject);
+      await busy(ev.submitter, async () => {
+        try {
+          let r = await T('t_openSession', body);
+          if (r.differs) {
+            const o = r.session;
+            if (!confirm(`ห้องนี้มีคาบที่เปิดอยู่แล้ว (${o.subject || ''} ${o.label || ''})\nปิดคาบนั้น (บันทึกขาดให้คนที่ยังไม่เช็ก) แล้วสร้างคาบใหม่?`)) return;
+            r = await T('t_openSession', { ...body, replace: true });
+          }
+          close();
+          if (r.session.mode === 'image') showQrResult(r.session);
+          else { setRoom(r.session.room); openTab('checkin'); toast('เปิดคาบแล้ว ฉาย QR ได้เลย'); }
+        } catch (e) { fail(e); }
+      });
+    });
+  }
+
+  async function showQrResult(s) {
+    let token;
+    try { token = (await T('t_token', { sessionId: s.sessionId })).token; } catch (e) { fail(e); return; }
+    const url = `${siteBase()}student.html?s=${encodeURIComponent(s.sessionId)}&t=${encodeURIComponent(token)}`;
+    const canvas = await makeQrCanvas(s, url);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+    const fname = `QR-เช็กชื่อ_${(s.subject || 'คาบเรียน').replace(/[\\/:*?"<>|\s]+/g, '')}_${classText(s.classLabel).replace(/[./]/g, '-') || 'ห้อง' + s.room}_${s.date}_${(s.label.match(/คาบ\s*([\d–-]+)/) || [, 'x'])[1]}.png`;
+    const file = new File([blob], fname, { type: 'image/png' });
+    const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+    const close = openModal(`
+      <div class="row"><h2 class="grow" style="margin:0">QR พร้อมส่งให้นักเรียน</h2><button class="btn sm" id="qr-x" type="button">ปิด</button></div>
+      <p class="small muted">บันทึกรูปนี้แล้วส่งใน LINE กลุ่มห้อง ใช้สแกนได้ถึง ${esc(thTime(s.closeAt))} น. (ตรงเวลาถึง ${esc(thTime(s.onTimeUntil))} น.)</p>
+      <img src="${URL.createObjectURL(blob)}" alt="QR Code เช็กชื่อ ${esc(s.subject)}" style="width:100%;max-width:440px;display:block;margin:0 auto 12px;border:1px solid var(--line);border-radius:12px">
+      <div class="row">
+        <button class="btn primary grow" id="qr-save" type="button">⬇ บันทึกรูป</button>
+        ${canShare ? '<button class="btn grow" id="qr-share" type="button">↗ แชร์รูป (LINE ฯลฯ)</button>' : ''}
+        <button class="btn grow" id="qr-copy" type="button">คัดลอกลิงก์</button>
+        <button class="btn grow" id="qr-open" type="button">ดูรายชื่อ / ปิดคาบ</button></div>`);
+    $('#qr-x').addEventListener('click', close);
+    $('#qr-save').addEventListener('click', () => {
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: fname });
+      document.body.appendChild(a); a.click(); a.remove(); toast('บันทึกรูปแล้ว');
+    });
+    if (canShare) $('#qr-share').addEventListener('click', async () => {
+      try { await navigator.share({ files: [file], title: 'เช็กชื่อเข้าเรียน', text: `สแกนเพื่อเช็กชื่อ ${s.subject} ถึง ${thTime(s.closeAt)} น.` }); } catch (e) { /* ยกเลิกการแชร์ */ }
+    });
+    $('#qr-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว'); } catch (e) { prompt('คัดลอกลิงก์นี้', url); } });
+    $('#qr-open').addEventListener('click', () => { close(); setRoom(s.room); openTab('checkin'); });
+  }
+
+  async function makeQrCanvas(s, url) {
+    try { await Promise.all([document.fonts.load('700 60px Sarabun'), document.fonts.load('400 40px Sarabun')]); } catch (e) { /* ใช้ฟอนต์สำรอง */ }
+    const W = 1080, H = 1500, FONT = 'Sarabun, "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif';
+    const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
+    const g = c.getContext('2d');
+    const text = (t, y, size, weight, color) => {
+      let px = size; g.font = `${weight} ${px}px ${FONT}`;
+      while (g.measureText(t).width > W - 100 && px > 24) { px -= 2; g.font = `${weight} ${px}px ${FONT}`; }
+      g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText(t, W / 2, y);
+    };
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#3056d3'; g.fillRect(0, 0, W, 210);
+    text('เช็กชื่อเข้าเรียน', 105, 84, 700, '#ffffff');
+    text([appCfg.SCHOOL, appCfg.TEACHER].filter(Boolean).join(' · '), 170, 38, 400, '#dbe4ff');
+    text(`${s.subject}${s.classLabel ? '  ' + classText(s.classLabel) : ''}`, 330, 92, 700, '#1c2434');
+    text(`วัน${DAYS[dowOf(s.date)]}ที่ ${thDate(s.date)}`, 405, 46, 400, '#475467');
+    text(s.label || '', 470, 46, 600, '#475467');
+    const q = qrcode(0, 'M'); q.addData(url); q.make();
+    const n = q.getModuleCount(), cell = Math.floor(780 / (n + 8)), size = cell * (n + 8), x0 = Math.round((W - size) / 2), y0 = 520;
+    g.fillStyle = '#ffffff'; g.strokeStyle = '#d0d5dd'; g.lineWidth = 4;
+    g.beginPath(); if (g.roundRect) g.roundRect(x0 - 16, y0 - 16, size + 32, size + 32, 28); else g.rect(x0 - 16, y0 - 16, size + 32, size + 32); g.fill(); g.stroke();
+    g.fillStyle = '#000000';
+    for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (q.isDark(r, col)) g.fillRect(x0 + (col + 4) * cell, y0 + (r + 4) * cell, cell, cell);
+    const yb = y0 + size + 90;
+    text(`ตรงเวลาถึง ${thTime(s.onTimeUntil)} น. · รับเช็กชื่อถึง ${thTime(s.closeAt)} น.`, yb, 46, 700, '#12805c');
+    text('สแกนด้วยกล้องโทรศัพท์ แล้วเข้าสู่ระบบด้วยเลขประจำตัว + PIN', yb + 62, 36, 400, '#475467');
+    text('ห้ามส่งรูปนี้ให้เพื่อนที่ไม่ได้อยู่ในห้องเรียน', yb + 112, 32, 400, '#c62d2d');
+    return c;
+  }
+
+  async function saveTimetable(slots, periods) {
+    await T('t_saveTimetable', { periods: periods || tb.periods, slots });
+    cfgVals = null; renderTimetable();
+  }
+
+  function openSlotDialog(i) {
+    const s = i === null ? { day: dowOf(todayStr()) > 5 ? 1 : dowOf(todayStr()), startPeriod: 1, endPeriod: 1, subject: '', classLabel: '', room: '', place: '', note: '' } : tb.slots[i];
+    const pOpts = (sel) => tb.periods.map((p) => `<option value="${p.period}" ${p.period === sel ? 'selected' : ''}>คาบ ${p.period} (${esc(p.start)}–${esc(p.end)})</option>`).join('');
+    const roomOpts = ['<option value="">— ไม่ใช่คาบสอนห้องเรียน (ประชุม/กิจกรรม) —</option>']
+      .concat(rooms.map((r) => `<option value="${esc(r.room)}" ${r.room === s.room ? 'selected' : ''}>${esc(r.label)} (${r.count} คน)</option>`))
+      .concat(s.room && !rooms.some((r) => r.room === s.room) ? [`<option value="${esc(s.room)}" selected>${esc(s.room)} (ยังไม่มีรายชื่อ ต้องนำเข้าก่อนสร้าง QR)</option>`] : []).join('');
+    const close = openModal(`<h2>${i === null ? 'เพิ่มคาบสอน' : 'แก้ไขคาบสอน'}</h2>
+      <form id="sd"><div class="grid cols-2">
+        <label class="field">วัน<select id="sd-day">${[1, 2, 3, 4, 5, 6, 7].map((d) => `<option value="${d}" ${d === s.day ? 'selected' : ''}>${DAYS[d]}</option>`).join('')}</select></label>
+        <label class="field">วิชา / กิจกรรม<input id="sd-subject" type="text" maxlength="60" value="${esc(s.subject)}" required></label>
+        <label class="field">คาบเริ่ม<select id="sd-a">${pOpts(s.startPeriod)}</select></label>
+        <label class="field">คาบสุดท้าย<select id="sd-b">${pOpts(s.endPeriod)}</select></label>
+        <label class="field">ชั้น/ห้อง ตามตารางสอน<input id="sd-class" type="text" maxlength="20" value="${esc(s.classLabel)}" placeholder="เช่น 4.2"></label>
+        <label class="field">ใช้รายชื่อห้องไหนในระบบ<select id="sd-room">${roomOpts}</select></label>
+        <label class="field">ห้องเรียน/สถานที่<input id="sd-place" type="text" maxlength="30" value="${esc(s.place)}" placeholder="เช่น 316"></label>
+        <label class="field">หมายเหตุ<input id="sd-note" type="text" maxlength="60" value="${esc(s.note)}"></label></div>
+        <div class="row end">${i !== null ? '<button class="btn danger" type="button" id="sd-del">ลบคาบนี้</button>' : ''}<span class="grow"></span><button class="btn" type="button" id="sd-cancel">ยกเลิก</button><button class="btn primary" type="submit">บันทึก</button></div></form>`);
+    $('#sd-cancel').addEventListener('click', close);
+    const delBtn = $('#sd-del');
+    if (delBtn) delBtn.addEventListener('click', async () => {
+      if (!confirm('ลบคาบนี้ออกจากตารางสอน?')) return;
+      try { await saveTimetable(tb.slots.filter((_, k) => k !== i)); close(); toast('ลบแล้ว'); } catch (e) { fail(e); }
+    });
+    $('#sd').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const next = { day: Number($('#sd-day').value), startPeriod: Number($('#sd-a').value), endPeriod: Number($('#sd-b').value), subject: $('#sd-subject').value,
+        classLabel: $('#sd-class').value, room: $('#sd-room').value, place: $('#sd-place').value, note: $('#sd-note').value };
+      if (next.endPeriod < next.startPeriod) return toast('คาบสุดท้ายต้องไม่ก่อนคาบเริ่ม', true);
+      const slots = tb.slots.slice();
+      if (i === null) slots.push(next); else slots[i] = next;
+      await busy(ev.submitter, async () => { try { await saveTimetable(slots); close(); toast('บันทึกตารางสอนแล้ว'); } catch (e) { fail(e); } });
+    });
+  }
+
+  function openPeriodsDialog() {
+    const close = openModal(`<h2>เวลาแต่ละคาบ</h2><p class="muted small">แก้เวลาให้ตรงกับโรงเรียน คาบที่สร้าง QR จะใช้เวลาเหล่านี้</p>
+      <form id="pd"><div class="scroll" style="max-height:55vh"><table><thead><tr><th>คาบ</th><th>เริ่ม</th><th>เลิก</th></tr></thead><tbody>
+      ${tb.periods.map((p) => `<tr><td>${p.period}</td><td><input type="time" data-p="${p.period}" data-k="start" value="${esc(p.start)}" required></td><td><input type="time" data-p="${p.period}" data-k="end" value="${esc(p.end)}" required></td></tr>`).join('')}
+      </tbody></table></div><div class="row end" style="margin-top:12px"><button class="btn" type="button" id="pd-cancel">ยกเลิก</button><button class="btn primary" type="submit">บันทึก</button></div></form>`);
+    $('#pd-cancel').addEventListener('click', close);
+    $('#pd').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const periods = tb.periods.map((p) => ({ period: p.period, start: $(`[data-p="${p.period}"][data-k=start]`).value, end: $(`[data-p="${p.period}"][data-k=end]`).value }));
+      await busy(ev.submitter, async () => { try { await saveTimetable(tb.slots, periods); close(); toast('บันทึกเวลาคาบแล้ว'); } catch (e) { fail(e); } });
+    });
+  }
 
   // ═════════════ มอบหมายงาน ═════════════
   async function renderAssign() {
@@ -385,7 +622,7 @@
   // ───── เริ่มต้น ─────
   (async function init() {
     if (!tt) return show('login');
-    try { const r = await T('t_students', {}); rooms = r.rooms; ensureRoom(); show('app'); openTab('checkin'); }
+    try { const r = await T('t_students', {}); rooms = r.rooms; ensureRoom(); show('app'); openTab('timetable'); }
     catch (e) { show('login'); }
   })();
 })();

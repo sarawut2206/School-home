@@ -134,3 +134,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 480px) { .top .brand { font-size: .95rem; } .who { font-size: .8rem; } }
 .gradebar { position: sticky; bottom: -18px; background: var(--card); padding: 10px 0 4px; border-top: 1px solid var(--line); display: grid; gap: 10px; z-index: 2; }
 .viewer img { max-height: 52vh; }
+.slot { display: flex; gap: 12px; align-items: center; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; flex-wrap: wrap; }
+.slot.now { border-color: var(--ok); background: var(--ok-soft); }
+.slot.plain { background: var(--bg); }
+.slot-time { min-width: 76px; text-align: center; line-height: 1.25; }
+.slot-time b { display: block; font-size: 1.15rem; }
+.slot-time span { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+.slot .grow { min-width: 140px; }

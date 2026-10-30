@@ -66,6 +66,7 @@
   }
 
   const busy = async (btn, fn) => {
+    if (!btn) return fn();
     const label = btn.textContent;
     btn.disabled = true;
     try { return await fn(); } finally { btn.disabled = false; btn.textContent = label; }

@@ -2,5 +2,6 @@
 // ดูขั้นตอนใน "คู่มือติดตั้ง.md"
 window.APP_CONFIG = {
   API: 'PASTE_WEB_APP_URL_HERE',
-  SCHOOL: 'โรงเรียน'
+  SCHOOL: 'โรงเรียนมัธยมวัดหนองแขม',
+  TEACHER: 'ครูศราวุธ พิมศรี'
 };
