@@ -124,6 +124,22 @@
   const fmtNum = (n) => (Math.round(Number(n) * 100) / 100).toLocaleString('th-TH', { maximumFractionDigits: 2 });
   const siteBase = () => location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
 
+  // ───── ปรับขนาดตัวอักษรเอง (Aa): ปกติ → ใหญ่ → ใหญ่มาก จำค่าไว้ในเครื่อง ─────
+  (function fontSize() {
+    const LV = [1, 1.15, 1.3], root = document.documentElement;
+    const apply = (i) => { root.style.setProperty('--fs', LV[i]); };
+    let i = Math.min(LV.length - 1, Math.max(0, Number(store.get('fs')) || 0));
+    apply(i);
+    const bar = document.querySelector('.top .wrap');
+    if (!bar) return;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn sm fsbtn';
+    const label = () => { b.innerHTML = 'A<small>a</small>' + ['', '+', '++'][i]; b.setAttribute('aria-label', 'ขนาดตัวอักษร ' + ['ปกติ', 'ใหญ่', 'ใหญ่มาก'][i] + ' (กดเพื่อเปลี่ยน)'); b.title = 'ขนาดตัวอักษร'; };
+    label();
+    b.addEventListener('click', () => { i = (i + 1) % LV.length; store.set('fs', String(i)); apply(i); label(); });
+    bar.insertBefore(b, bar.querySelector('#install-app') || bar.querySelector('#logout'));   // ไม่มีทั้งสองปุ่ม → วางท้ายแถบ
+  })();
+
   // ───── แอปติดตั้งได้ (PWA) ─────
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* ใช้เว็บปกติต่อได้ */ }); });
