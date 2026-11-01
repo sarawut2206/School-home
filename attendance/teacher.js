@@ -622,12 +622,22 @@
       g.fillText(s, x, y);
     };
     const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
-    const wrapLines = (t, max, n) => {
-      fnt(40, 700); const out = []; let cur = '';
-      for (const ch of Array.from(String(t))) { if (g.measureText(cur + ch).width > max && cur) { out.push(cur); cur = ch; } else cur += ch; }
-      if (cur) out.push(cur);
-      if (out.length > n) { out.length = n; out[n - 1] = out[n - 1].slice(0, -1) + '…'; }
+    // ตัดบรรทัดตามขอบเขตคำไทย (ไม่หักกลางคำ) ใช้ฟอนต์ที่ตั้งไว้ใน g ตอนเรียก
+    const segr = window.Intl && Intl.Segmenter ? new Intl.Segmenter('th', { granularity: 'word' }) : null;
+    const wrapWords = (t, max) => {
+      const units = segr ? Array.from(segr.segment(String(t)), (x) => x.segment) : Array.from(String(t));
+      const out = []; let cur = '';
+      for (const u of units) { if (cur && g.measureText(cur + u).width > max) { out.push(cur.trimEnd()); cur = u.trimStart(); } else cur += u; }
+      if (cur.trim()) out.push(cur.trimEnd());
       return out;
+    };
+    // ชื่อยาว: ลดขนาดตัวอักษรลงทีละขั้นให้พอดี 2 บรรทัด ถ้ายังไม่พอค่อยตัดท้ายด้วย …
+    const fitTitle = (t, max) => {
+      for (const size of [42, 38, 35, 32]) { fnt(size, 700); const L = wrapWords(t, max); if (L.length <= 2) return { lines: L, size }; }
+      fnt(32, 700); const L = wrapWords(t, max).slice(0, 2);
+      while (L[1].length > 1 && g.measureText(L[1] + '…').width > max) L[1] = L[1].slice(0, -1);
+      L[1] += '…';
+      return { lines: L, size: 32 };
     };
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
 
@@ -644,7 +654,8 @@
 
     // ข้อมูลงาน
     let y = 276;
-    wrapLines(a.title, W - 2 * M, 2).forEach((l) => { put(l, M, y, { s: 42, w: 700, c: NAVY }); y += 54; });
+    const ttl = fitTitle(a.title, W - 2 * M);
+    ttl.lines.forEach((l) => { put(l, M, y, { s: ttl.size, w: 700, c: NAVY }); y += Math.round(ttl.size * 1.28); });
     const meta = [['วิชา', a.subject || '–'], ['ชั้นเรียน', classText(a.classLabel) || roomLabel(state.room)], ['กำหนดส่ง', a.due ? `${thDateTime(a.due)} น.` : 'ไม่กำหนด'], ['ข้อมูล ณ', `${thDate(todayStr())} เวลา ${nowHM()} น.`]];
     const mws = [0.75, 0.8, 1.35, 1.6], mwSum = mws.reduce((p, q) => p + q, 0);
     let mx = M;
