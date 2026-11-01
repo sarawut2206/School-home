@@ -8,6 +8,8 @@
   let session = null;          // { token, student, exp }
   let me = null;               // ข้อมูลจาก action "me"
   let checkinResult = null;    // ผลเช็กชื่อล่าสุด
+  let confirmLink = null;      // เปิดจากลิงก์/QR แล้วล็อกอินแล้ว: รอให้นักเรียนตรวจชื่อและกดยืนยัน { s, t, info }
+  let linkInfo = null;         // ข้อมูลคาบจากลิงก์ (ได้ก่อนล็อกอิน)
   let activeAsg = null;        // งานที่กำลังส่ง
   let photos = [];             // รูปที่เลือกไว้ (ย่อแล้ว)
   let setupId = '';
@@ -31,7 +33,7 @@
   function setMode(m) {
     loginMode = m === 'pin' ? 'pin' : 'id';
     $('#pin-wrap').classList.toggle('hidden', loginMode !== 'pin');
-    $('#login-note').textContent = pending ? 'เข้าสู่ระบบเพื่อเช็กชื่อ (จะเช็กชื่อให้ทันทีหลังเข้าสู่ระบบ)' : (loginMode === 'pin' ? 'ใช้เลขประจำตัวนักเรียนและ PIN 4 หลักของคุณ' : 'ใส่เลขประจำตัวนักเรียนของคุณ');
+    $('#login-note').textContent = pending ? 'ใส่เลขประจำตัว ระบบจะแสดงชื่อให้ตรวจก่อน แล้วกดยืนยันเช็กชื่อ' : (loginMode === 'pin' ? 'ใช้เลขประจำตัวนักเรียนและ PIN 4 หลักของคุณ' : 'ใส่เลขประจำตัวนักเรียนของคุณ');
   }
   const show = (id) => ['view-login', 'view-setup', 'view-app'].forEach((v) => $('#' + v).classList.toggle('hidden', v !== id));
   const showNav = (on) => $('#nav').classList.toggle('hidden', !on);
@@ -51,6 +53,7 @@
   function logout() {
     store.del('session');
     session = null; me = null; checkinResult = null;
+    if (confirmLink) { pending = { s: confirmLink.s, t: confirmLink.t }; confirmLink = null; setMode(loginMode); }   // กด "ไม่ใช่ฉัน" แล้วให้เพื่อนใช้ลิงก์เดิมต่อได้
     $('#who').classList.add('hidden'); $('#logout').classList.add('hidden'); showNav(false);
     $('#login-pin').value = '';
     $('#login-id').value = store.get('lastId') || '';
@@ -108,15 +111,7 @@
     show('view-app'); showNav(true);
     $('#tab-checkin').innerHTML = '<div class="card center muted">กำลังโหลด…</div>';
     const hadPending = !!pending;
-    if (pending) {
-      const p = pending; pending = null;
-      try {
-        checkinResult = { ok: true, ...(await api('checkin', { token: session.token, sessionId: p.s, t: p.t, deviceId: deviceId() })) };
-      } catch (e) {
-        if (authLost(e)) { pending = p; return; }
-        checkinResult = { ok: false, code: e.code, message: e.message };
-      }
-    }
+    if (pending) { confirmLink = { ...pending, info: linkInfo }; pending = null; }   // ไม่เช็กให้อัตโนมัติ: แสดงชื่อให้นักเรียนตรวจแล้วกดยืนยันเอง (กันกรอกเลขผิดคน)
     if (first && !hadPending) { me = gotMe(first); renderCheckin(); renderSubmit(); renderMe(); } else await refresh();
     if (!me) return;   // เข้าสู่ระบบหมดอายุ: รอให้ล็อกอินใหม่ แล้วค่อยเปิดลิงก์งานต่อ
     if (pendingAsg) {
@@ -158,7 +153,8 @@
         top = `<div class="result bad" role="alert"><div class="big" aria-hidden="true">${icon('alert')}</div><h2>เช็กชื่อไม่สำเร็จ</h2><p>${esc(r.message)}</p></div>`;
       }
     }
-    const list = me ? (me.openSessions || []) : [];
+    if (confirmLink) top = confirmCard() + top;
+    const list = (me ? (me.openSessions || []) : []).filter((x) => !confirmLink || x.sessionId !== confirmLink.s);   // คาบเดียวกับการ์ดยืนยัน ไม่ต้องโชว์ซ้ำ
     const todayRows = (me ? me.attendance : []).filter((a) => a.status !== 'pending').slice(0, 1);
     const sessCards = list.map((x) => {
       const what = `${x.subject ? esc(x.subject) : 'คาบเรียน'}${x.classLabel ? ' · ' + esc(x.classLabel) : ''}`;
@@ -181,6 +177,22 @@
         ${todayRows.length ? `<p class="small muted" style="margin-top:10px">คาบล่าสุด: ${esc(thDate(todayRows[0].date))} ${badge(todayRows[0].status)}</p>` : ''}
         <p class="small muted">เครื่องหนึ่งเครื่องเช็กชื่อได้คนเดียว ถ้าใช้เครื่องเดียวกันเช็กแทนเพื่อน ระบบจะแจ้งครู</p>
       </div>`;
+    const cb = $('#ci-confirm', el);
+    if (cb) cb.addEventListener('click', () => busy(cb, async () => {
+      const l = confirmLink;
+      try {
+        checkinResult = { ok: true, ...(await api('checkin', { token: session.token, sessionId: l.s, t: l.t, deviceId: deviceId() })) };
+        confirmLink = null;
+      } catch (e) {
+        if (authLost(e)) return;
+        checkinResult = { ok: false, code: e.code, message: e.message };
+        confirmLink = null;
+      }
+      await refresh();
+      window.scrollTo({ top: 0 });
+    }));
+    const cn = $('#ci-notme', el);
+    if (cn) cn.addEventListener('click', logout);
     $$('[data-ci]', el).forEach((b) => b.addEventListener('click', () => busy(b, async () => {
       try {
         checkinResult = { ok: true, ...(await api('checkin', { token: session.token, sessionId: b.dataset.ci, app: true, deviceId: deviceId() })) };
@@ -191,6 +203,23 @@
       await refresh();
       window.scrollTo({ top: 0 });
     })));
+  }
+
+  // การ์ดยืนยันเช็กชื่อหลังเปิดจากลิงก์/QR: โชว์ชื่อกับคาบ แล้วให้กดยืนยัน
+  const stateText = (i) => ({
+    notyet: `ยังไม่ถึงวันเช็กชื่อ เช็กได้ในวันที่ ${thDate(i.date)}`,
+    late: 'เลยเวลารับเช็กชื่อของคาบนี้แล้ว ให้แจ้งครู',
+    closed: 'คาบนี้ปิดแล้ว ถ้าอยู่ในห้องให้แจ้งครู'
+  }[i.state] || '');
+  function confirmCard() {
+    const i = confirmLink.info, st = session.student, bad = i && i.state !== 'open';
+    return `<div class="card"><h2>${icon('userCheck')}ยืนยันการเช็กชื่อ</h2>
+      <p style="font-size:1.2em;margin:.2rem 0"><b>${esc(st.name)}</b></p>
+      <p class="small muted" style="margin:0 0 .6rem">เลขประจำตัว ${esc(st.id)} · ห้อง ${esc(st.room)}</p>
+      ${i ? `<p class="small" style="margin:0 0 .6rem">${icon('calendar')} <b>${esc(i.subject || 'คาบเรียน')}${i.classLabel ? ' · ' + esc(i.classLabel) : ''}</b> · ${esc(thDate(i.date))}${i.label ? ' · ' + esc(i.label) : ''}<br>รับเช็กชื่อถึง ${esc(thTime(i.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(i.onTimeUntil))} น.</p>` : ''}
+      ${bad ? `<p class="result warn small" style="margin:0 0 .6rem">${icon('alert')} ${esc(stateText(i))}</p>` : ''}
+      <button class="btn primary block" id="ci-confirm" type="button" style="font-size:1.15rem;min-height:56px" ${bad ? 'disabled' : ''}>${icon('userCheck')} ใช่ ยืนยันเช็กชื่อ</button>
+      <button class="btn block" id="ci-notme" type="button" style="margin-top:8px">ไม่ใช่ฉัน (เปลี่ยนคน)</button></div>`;
   }
 
   // ถามสถานะคาบเป็นระยะ: ครูเปิดคาบแล้วปุ่มเช็กชื่อขึ้นเอง
@@ -410,7 +439,21 @@
   }
 
   // ───── เริ่มต้น ─────
+  // เปิดจากลิงก์/QR: ถามข้อมูลคาบมาโชว์บนหน้าล็อกอินทันที (ก่อนล็อกอิน) จะได้รู้ว่าคาบอะไร เช็กได้เมื่อไร
+  async function loadLinkInfo() {
+    const box = $('#link-info'); if (!pending || !box) return;
+    try {
+      linkInfo = await api('sessionInfo', { s: pending.s, t: pending.t }, { tries: 2 });
+      const bad = linkInfo.state !== 'open';
+      box.className = 'result ' + (bad ? 'warn' : 'ok');
+      box.innerHTML = `<b>${icon('calendar')} ${esc(linkInfo.subject || 'คาบเรียน')}${linkInfo.classLabel ? ' · ' + esc(linkInfo.classLabel) : ''}</b><br><span class="small">${esc(thDate(linkInfo.date))}${linkInfo.label ? ' · ' + esc(linkInfo.label) : ''} · รับเช็กชื่อถึง ${esc(thTime(linkInfo.closeAt))} น.${bad ? '<br><b>' + esc(stateText(linkInfo)) + '</b>' : ''}</span>`;
+    } catch (e) {
+      box.className = 'result bad'; box.innerHTML = `${icon('alert')} ${esc(e.message || 'ลิงก์ไม่ถูกต้อง')}`;
+    }
+  }
+
   (async function init() {
+    loadLinkInfo();
     $('#login-id').value = store.get('lastId') || '';
     api('ping', {}, { tries: 1 }).then((r) => setMode(r.loginMode)).catch(() => {});
     const s = loadSession();
