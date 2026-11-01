@@ -523,7 +523,7 @@
 
   // ═════════════ ตรวจงาน ═════════════
   let reviewSel = '';
-  let rv = { data: null, onlyPending: false, queue: [], i: 0, sel: new Set() };
+  let rv = { data: null, filter: 'all', queue: [], i: 0, sel: new Set() };
 
   async function renderReview() {
     const el = $('#p-review'), room = ensureRoom();
@@ -554,10 +554,12 @@
     const body = $('#rv-body'); if (!body || !rv.data) return;
     const list = rv.data.students, a = rv.data.assignment;
     const cnt = (s) => list.filter((x) => x.status === s).length;
-    const shown = rv.onlyPending ? list.filter((x) => x.status === 'pending') : list;
+    const FLT = [['all', 'ทั้งหมด'], ['sent', 'ส่งแล้ว'], ['pending', 'รอตรวจ'], ['done', 'ครบถ้วน'], ['revise', 'ต้องแก้ไข'], ['none', 'ไม่ผ่าน'], ['missing', 'ยังไม่ส่ง']];
+    const fcount = (k) => k === 'all' ? list.length : k === 'sent' ? list.length - cnt('missing') : cnt(k);
+    const shown = rv.filter === 'all' ? list : rv.filter === 'sent' ? list.filter((x) => x.status !== 'missing') : list.filter((x) => x.status === rv.filter);
     body.innerHTML = `<div class="card">
       <div class="row"><div class="grow"><b>${esc(a.title)}</b> <span class="muted small">คะแนนเต็ม ${fmtNum(a.maxScore)}</span></div>
-        <label class="row small" style="gap:6px"><input type="checkbox" id="rv-only" ${rv.onlyPending ? 'checked' : ''}> แสดงเฉพาะรอตรวจ</label>
+        <button class="btn sm" id="rv-report" type="button">${icon('chart')}รายงานส่งงาน (รูป)</button>
         <button class="btn primary sm" id="rv-start" type="button" ${cnt('pending') ? '' : 'disabled'}>เริ่มตรวจ (${cnt('pending')})</button></div>
       <div class="grid cols-4" style="margin:10px 0">
         <div class="stat"><b>${list.length}</b><span>นักเรียนทั้งหมด</span></div>
@@ -566,7 +568,7 @@
         <div class="stat"><b>${cnt('pending')}</b><span>รอตรวจ</span></div></div>
       <div class="small muted">ความคืบหน้าการส่งงาน ${list.length ? Math.round((list.length - cnt('missing')) / list.length * 1000) / 10 : 0}%</div>
       <div class="bar" style="margin:4px 0 10px"><i style="width:${list.length ? (list.length - cnt('missing')) / list.length * 100 : 0}%"></i></div>
-      <p class="row">${badge('pending', 'รอตรวจ ' + cnt('pending'))}${badge('done', 'ครบถ้วน ' + cnt('done'))}${badge('revise', 'ต้องแก้ไข ' + cnt('revise'))}${badge('none', 'ไม่ผ่าน ' + cnt('none'))}${badge('missing', 'ยังไม่ส่ง ' + cnt('missing'))}</p>
+      <div class="chips" role="group" aria-label="กรองตามสถานะ">${FLT.map(([k, t]) => `<button type="button" class="chip" data-flt="${k}" aria-pressed="${rv.filter === k}">${t}<b>${fcount(k)}</b></button>`).join('')}</div>
       <div class="bulkbar"><div class="row"><button class="btn ok" id="bk-pending" type="button" ${cnt('pending') ? '' : 'disabled'}>${icon('checkCircle')}ครบถ้วนทั้งหมดที่รอตรวจ (${cnt('pending')})</button><span class="small muted grow">คลิกเดียวตรวจทุกคนที่รอตรวจเป็น "ครบถ้วน"</span></div>
         <div class="row bk2"><span class="small grow" id="bk-count">หรือติ๊กเลือกรายคนในตาราง · เลือกแล้ว ${rv.sel.size} คน</span>
         <button class="btn sm" data-bk="done" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('check')}ครบถ้วน</button><button class="btn sm" data-bk="revise" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('edit')}ต้องแก้ไข</button><button class="btn sm danger" data-bk="none" type="button" ${rv.sel.size ? '' : 'disabled'}>${icon('x')}ไม่ผ่าน</button></div></div>
@@ -574,8 +576,9 @@
         <td>${s.submissionId ? `<input type="checkbox" class="chk" data-sel="${esc(s.submissionId)}" ${rv.sel.has(s.submissionId) ? 'checked' : ''} aria-label="เลือก ${esc(s.name)}">` : ''}</td>
         <td>${esc(s.name)}<div class="small muted">${esc(s.studentId)}${s.submittedAt ? ' · ส่ง ' + esc(thDateTime(s.submittedAt)) : ''}${s.late ? ' · <b style="color:var(--bad)">ส่งช้า</b>' : ''}${s.round > 1 ? ' · รอบ ' + s.round : ''}</div></td>
         <td>${badge(s.status)}</td><td class="num">${s.count || ''}</td><td class="num">${s.score === null || s.status === 'missing' ? '' : fmtNum(s.score)}</td>
-        <td>${s.count ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${esc(s.studentId)}" type="button">ดูไฟล์</button><button class="btn sm" data-rc="${esc(s.studentId)}" type="button">ใบหลักฐาน</button></div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
-    $('#rv-only').addEventListener('change', (e) => { rv.onlyPending = e.target.checked; drawReview(); });
+        <td>${s.count ? `<div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${esc(s.studentId)}" type="button">ดูไฟล์</button><button class="btn sm" data-rc="${esc(s.studentId)}" type="button">ใบหลักฐาน</button></div>` : ''}</td></tr>`).join('')}${shown.length ? '' : '<tr><td colspan="6" class="center muted">ไม่มีรายการในตัวกรองนี้</td></tr>'}</tbody></table></div></div>`;
+    $$('[data-flt]', body).forEach((b) => b.addEventListener('click', () => { rv.filter = b.dataset.flt; drawReview(); }));
+    $('#rv-report').addEventListener('click', showStatusReport);
     $('#rv-start').addEventListener('click', () => openViewer(list.find((x) => x.status === 'pending').studentId, true));
     $('#bk-pending').addEventListener('click', () => bulkGrade('done', { onlyPending: true, assignmentId: reviewSel }, cnt('pending')));
     $$('[data-bk]', body).forEach((b) => b.addEventListener('click', () => bulkGrade(b.dataset.bk, { submissionIds: Array.from(rv.sel) }, rv.sel.size)));
@@ -583,6 +586,148 @@
     $('#rv-selall').addEventListener('change', (e) => { shown.forEach((s) => { if (!s.submissionId) return; if (e.target.checked) rv.sel.add(s.submissionId); else rv.sel.delete(s.submissionId); }); drawReview(); });
     $$('[data-rc]', body).forEach((b) => b.addEventListener('click', () => openTeacherReceipt(b.dataset.rc)));
     $$('[data-open]', body).forEach((b) => b.addEventListener('click', () => openViewer(b.dataset.open, false)));
+  }
+
+  // ═════ รายงานสถานะการส่งงาน (รูปแบบทางการ ไว้ส่งให้นักเรียนใน LINE) ═════
+  // แสดงเฉพาะสถานะส่ง/ไม่ส่ง (ไม่มีคะแนน) เรียงตามเลขที่
+  async function statusReportCanvas(scope) {
+    try { await Promise.all([document.fonts.load('700 40px Sarabun'), document.fonts.load('400 28px Sarabun')]); } catch (e) { /* ใช้ฟอนต์สำรอง */ }
+    const a = rv.data.assignment, all = rv.data.students.slice();
+    if (all.every((s) => s.no !== '' && s.no !== undefined && s.no !== null)) all.sort((p, q) => p.no - q.no);
+    const sent = all.filter((s) => s.status !== 'missing'), miss = all.filter((s) => s.status === 'missing');
+    const rows = scope === 'missing' ? miss : all;
+    const W = 1240, H = 1754, M = 70, NAVY = '#14306e', GOLD = '#c9a24b', GRAY = '#5a6579', LINE = '#dce2ec', FONT = 'Sarabun, "Noto Sans Thai", sans-serif';
+    const c = Object.assign(document.createElement('canvas'), { width: W, height: H }), g = c.getContext('2d');
+    const fnt = (s, w) => { g.font = `${w || 400} ${s}px ${FONT}`; };
+    const put = (t, x, y, o = {}) => {
+      let size = o.s || 28;
+      fnt(size, o.w); g.fillStyle = o.c || '#0f172a'; g.textAlign = o.a || 'left'; g.textBaseline = 'alphabetic';
+      let s = String(t);
+      if (o.max) {   // ยาวเกินช่อง: ย่อตัวอักษรลงก่อน (ไม่เกิน 30%) ถ้ายังไม่พอค่อยตัดท้ายด้วย …
+        while (size > (o.s || 28) * 0.7 && g.measureText(s).width > o.max) { size -= 1; fnt(size, o.w); }
+        while (s.length > 1 && g.measureText(s).width > o.max) s = s.slice(0, -2) + '…';
+      }
+      g.fillText(s, x, y);
+    };
+    const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+    const wrapLines = (t, max, n) => {
+      fnt(40, 700); const out = []; let cur = '';
+      for (const ch of Array.from(String(t))) { if (g.measureText(cur + ch).width > max && cur) { out.push(cur); cur = ch; } else cur += ch; }
+      if (cur) out.push(cur);
+      if (out.length > n) { out.length = n; out[n - 1] = out[n - 1].slice(0, -1) + '…'; }
+      return out;
+    };
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+
+    // หัวกระดาษ
+    g.fillStyle = NAVY; g.fillRect(0, 0, W, 212); g.fillStyle = GOLD; g.fillRect(0, 212, W, 6);
+    try {
+      const logo = await Receipt.loadImage(siteBase() + 'img/logo.webp');
+      g.save(); g.beginPath(); g.arc(M + 78, 106, 74, 0, Math.PI * 2); g.clip(); g.drawImage(logo, M + 4, 32, 148, 148); g.restore();
+    } catch (e) { /* ไม่มีโลโก้ก็ใช้ได้ */ }
+    const hx = W / 2 + 60;
+    put((window.APP_CONFIG && APP_CONFIG.SCHOOL) || 'โรงเรียน', hx, 84, { s: 38, w: 700, c: '#ffffff', a: 'center' });
+    put('รายงานสถานะการส่งงาน', hx, 154, { s: 60, w: 700, c: '#ffffff', a: 'center' });
+    put('NK EduTrack · ระบบเช็กชื่อและส่งงานนักเรียน', hx, 192, { s: 22, c: '#9db8f2', a: 'center' });
+
+    // ข้อมูลงาน
+    let y = 276;
+    wrapLines(a.title, W - 2 * M, 2).forEach((l) => { put(l, M, y, { s: 42, w: 700, c: NAVY }); y += 54; });
+    const meta = [['วิชา', a.subject || '–'], ['ชั้นเรียน', classText(a.classLabel) || roomLabel(state.room)], ['กำหนดส่ง', a.due ? `${thDateTime(a.due)} น.` : 'ไม่กำหนด'], ['ข้อมูล ณ', `${thDate(todayStr())} เวลา ${nowHM()} น.`]];
+    const mws = [0.75, 0.8, 1.35, 1.6], mwSum = mws.reduce((p, q) => p + q, 0);
+    let mx = M;
+    meta.forEach(([k, v], i) => { const mw = (W - 2 * M) * mws[i] / mwSum; put(k, mx, y + 14, { s: 20, c: GRAY }); put(v, mx, y + 48, { s: 27, w: 700, max: mw - 14 }); mx += mw; });
+    y += 92;
+
+    // สรุปตัวเลข
+    const pct = all.length ? Math.round(sent.length / all.length * 1000) / 10 : 0, tw = (W - 2 * M - 3 * 18) / 4;
+    [['นักเรียนทั้งหมด', all.length, NAVY, '#e6ecf8'], ['ส่งงานแล้ว', sent.length, '#0f7b55', '#e0f3ea'], ['ยังไม่ส่งงาน', miss.length, '#b42323', '#fbe6e6'], ['ร้อยละที่ส่งแล้ว', pct + '%', '#8f5600', '#fdf0d3']].forEach(([k, v, col, bg], i) => {
+      const x = M + i * (tw + 18);
+      g.fillStyle = bg; rr(x, y, tw, 118, 16); g.fill();
+      put(v, x + tw / 2, y + 66, { s: 58, w: 700, c: col, a: 'center' });
+      put(k, x + tw / 2, y + 101, { s: 22, c: GRAY, a: 'center' });
+    });
+    y += 118 + 40;
+
+    // ตารางรายชื่อ
+    put(scope === 'missing' ? 'รายชื่อนักเรียนที่ยังไม่ส่งงาน' : 'รายชื่อนักเรียนและสถานะการส่งงาน', M, y, { s: 32, w: 700, c: NAVY });
+    g.fillStyle = LINE; g.fillRect(M, y + 14, W - 2 * M, 2);
+    y += 36;
+    const footerTop = H - 222, area = footerTop - y - 10;
+    if (!rows.length) {
+      put('ส่งงานครบทุกคนแล้ว ไม่มีรายชื่อที่ยังไม่ส่ง', W / 2, y + area / 2, { s: 40, w: 700, c: '#0f7b55', a: 'center' });
+    } else {
+      const perCol = Math.max(1, Math.floor(area / 38 - 1));      // ไม่ให้แถวเตี้ยกว่า 38px
+      const cols = Math.max(rows.length > 14 ? 2 : 1, Math.ceil(rows.length / perCol)), gap = 28;
+      const cw = (W - 2 * M - gap * (cols - 1)) / cols, rowsPer = Math.ceil(rows.length / cols);
+      const rh = Math.min(60, Math.floor(area / (rowsPer + 1))), fs = Math.min(28, Math.round(rh * 0.5));
+      const stW = Math.min(136, cw * 0.26), noW = 58;
+      for (let k = 0; k < cols; k++) {
+        const x0 = M + k * (cw + gap), part = rows.slice(k * rowsPer, (k + 1) * rowsPer);
+        g.fillStyle = NAVY; rr(x0, y, cw, rh, 10); g.fill();
+        put('เลขที่', x0 + noW / 2, y + rh * 0.68, { s: fs - 3, w: 700, c: '#ffffff', a: 'center' });
+        put('ชื่อ-นามสกุล', x0 + noW + 12, y + rh * 0.68, { s: fs - 3, w: 700, c: '#ffffff' });
+        put('สถานะ', x0 + cw - stW / 2 - 8, y + rh * 0.68, { s: fs - 3, w: 700, c: '#ffffff', a: 'center' });
+        part.forEach((s, i) => {
+          const yy = y + rh * (i + 1);
+          if (i % 2 === 0) { g.fillStyle = '#f4f6fb'; g.fillRect(x0, yy, cw, rh); }
+          g.fillStyle = LINE; g.fillRect(x0, yy + rh - 1, cw, 1);
+          put(s.no !== '' && s.no !== undefined ? s.no : k * rowsPer + i + 1, x0 + noW / 2, yy + rh * 0.68, { s: fs, c: GRAY, a: 'center' });
+          put(s.name, x0 + noW + 12, yy + rh * 0.68, { s: fs, max: cw - noW - stW - 36 });
+          const ok = s.status !== 'missing', lt = ok && s.late, label = !ok ? 'ยังไม่ส่ง' : lt ? 'ส่งช้า' : 'ส่งแล้ว';
+          const col = !ok ? '#b42323' : lt ? '#8f5600' : '#0f7b55', bg = !ok ? '#fbe6e6' : lt ? '#fdf0d3' : '#e0f3ea';
+          const pw = stW - 8, ph = rh * 0.7, px = x0 + cw - pw - 12;
+          g.fillStyle = bg; rr(px, yy + (rh - ph) / 2, pw, ph, ph / 2); g.fill();
+          put(label, px + pw / 2, yy + rh * 0.66, { s: fs - 3, w: 700, c: col, a: 'center' });
+        });
+        g.strokeStyle = LINE; g.lineWidth = 2; rr(x0, y, cw, rh * (part.length + 1), 10); g.stroke();
+      }
+    }
+
+    // ท้ายกระดาษ + ลายเซ็น
+    g.fillStyle = LINE; g.fillRect(M, footerTop, W - 2 * M, 2);
+    put('หมายเหตุ: รายงานนี้แสดงสถานะการส่งงานตามข้อมูลในระบบ ณ เวลาที่ระบุ', M, footerTop + 44, { s: 22, c: GRAY });
+    put('นักเรียนที่ยังไม่ส่ง กรุณาส่งงานผ่านระบบโดยเร็วที่สุด หรือติดต่อครูผู้สอน', M, footerTop + 76, { s: 22, c: GRAY });
+    const sx = W - M - 360;
+    put('ครูผู้สอน', sx + 180, footerTop + 120, { s: 22, c: GRAY, a: 'center' });
+    g.fillStyle = '#94a3b8'; for (let x = sx; x < sx + 360; x += 8) g.fillRect(x, footerTop + 150, 4, 2);
+    put((window.APP_CONFIG && APP_CONFIG.TEACHER) || '', sx + 180, footerTop + 184, { s: 28, w: 700, c: NAVY, a: 'center', max: 360 });
+    g.fillStyle = NAVY; g.fillRect(0, H - 52, W, 52);
+    put('NK EduTrack • STUDENT SUBMISSION REPORT', W / 2, H - 20, { s: 20, w: 700, c: '#ffffff', a: 'center' });
+    return c;
+  }
+
+  async function showStatusReport() {
+    if (!rv.data) return;
+    const a = rv.data.assignment;
+    let canvas, blob, url = '', scope = rv.data.students.some((s) => s.status === 'missing') ? 'missing' : 'all';
+    const close = openModal(`
+      <div class="row"><h2 class="grow" style="margin:0">${icon('chart')}รายงานสถานะการส่งงาน</h2><button class="btn sm" id="sr-x" type="button">${icon('x')}ปิด</button></div>
+      <p class="small muted">รูปแบบทางการ ไม่แสดงคะแนน บันทึกรูปแล้วส่งใน LINE กลุ่มห้องให้นักเรียนเห็นว่าใครส่งแล้ว/ยังไม่ส่ง</p>
+      <label class="field">รายชื่อที่แสดง<select id="sr-scope"><option value="missing" ${scope === 'missing' ? 'selected' : ''}>เฉพาะคนที่ยังไม่ส่ง</option><option value="all" ${scope === 'all' ? 'selected' : ''}>ทุกคน (ส่งแล้ว + ยังไม่ส่ง)</option></select></label>
+      <p class="center muted" id="sr-wait">กำลังสร้างรูป…</p>
+      <img id="sr-img" alt="รายงานสถานะการส่งงาน" class="hidden" style="width:100%;max-width:520px;display:block;margin:0 auto 12px;border:1px solid var(--line);border-radius:12px">
+      <div class="row"><button class="btn primary grow" id="sr-save" type="button" disabled>${icon('download')} บันทึกรูป</button><button class="btn grow" id="sr-pdf" type="button" disabled>${icon('file')} บันทึกเป็น PDF</button><button class="btn grow hidden" id="sr-share" type="button">${icon('share')} แชร์ (LINE ฯลฯ)</button></div>`);
+    const base = () => `รายงานการส่งงาน_${a.title.replace(/[\\/:*?"<>|\s]+/g, '')}_${todayStr()}${scope === 'missing' ? '_ยังไม่ส่ง' : ''}`;
+    const save = (b, name) => { const l = Object.assign(document.createElement('a'), { href: URL.createObjectURL(b), download: name }); document.body.appendChild(l); l.click(); l.remove(); toast('บันทึกแล้ว'); };
+    async function draw() {
+      $('#sr-wait').classList.remove('hidden'); $('#sr-img').classList.add('hidden'); ['#sr-save', '#sr-pdf'].forEach((s) => { $(s).disabled = true; });
+      canvas = await statusReportCanvas(scope);
+      blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(blob); $('#sr-img').src = url;
+      $('#sr-wait').classList.add('hidden'); $('#sr-img').classList.remove('hidden'); ['#sr-save', '#sr-pdf'].forEach((s) => { $(s).disabled = false; });
+      const file = new File([blob], base() + '.png', { type: 'image/png' });
+      $('#sr-share').classList.toggle('hidden', !(navigator.canShare && navigator.canShare({ files: [file] })));
+    }
+    $('#sr-x').addEventListener('click', () => { if (url) URL.revokeObjectURL(url); close(); });
+    $('#sr-scope').addEventListener('change', (e) => { scope = e.target.value; draw(); });
+    $('#sr-save').addEventListener('click', () => save(blob, base() + '.png'));
+    $('#sr-pdf').addEventListener('click', async () => save(await Receipt.toPdf(canvas), base() + '.pdf'));
+    $('#sr-share').addEventListener('click', async () => {
+      try { await navigator.share({ files: [new File([blob], base() + '.png', { type: 'image/png' })], title: 'สถานะการส่งงาน', text: a.title }); } catch (e) { /* ยกเลิกการแชร์ */ }
+    });
+    draw();
   }
 
   // ตรวจหลายคนในคลิกเดียว (ยืนยันก่อนบันทึก เพราะแก้ย้อนกลับต้องตรวจใหม่ทีละคน)
