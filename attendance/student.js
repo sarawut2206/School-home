@@ -1,7 +1,7 @@
 /* หน้านักเรียน: เข้าสู่ระบบ → เช็กชื่อ (สแกน QR หรือกดปุ่มในแอป) → ส่งงานด้วยรูปถ่าย → ดูผลของตัวเอง */
 (function () {
   const params = new URLSearchParams(location.search);
-  let pending = params.get('s') && params.get('t') ? { s: params.get('s'), t: params.get('t') } : null;
+  let pending = params.get('s') && params.get('t') ? { s: params.get('s'), t: params.get('t'), x: params.get('x') || '' } : null;   // x = รหัสโหมดทดสอบ (ครูกดจากหน้าครู)
   let pendingAsg = params.get('a') || null;   // ลิงก์ส่งงานที่ครูส่งให้ (?a=รหัสงาน)
   if (pending || pendingAsg) history.replaceState(null, '', location.pathname); // กัน QR/ลิงก์ค้างอยู่ใน URL/ประวัติเบราว์เซอร์
 
@@ -53,7 +53,7 @@
   function logout() {
     store.del('session');
     session = null; me = null; checkinResult = null;
-    if (confirmLink) { pending = { s: confirmLink.s, t: confirmLink.t }; confirmLink = null; setMode(loginMode); }   // กด "ไม่ใช่ฉัน" แล้วให้เพื่อนใช้ลิงก์เดิมต่อได้
+    if (confirmLink) { pending = { s: confirmLink.s, t: confirmLink.t, x: confirmLink.x }; confirmLink = null; setMode(loginMode); }   // กด "ไม่ใช่ฉัน" แล้วให้เพื่อนใช้ลิงก์เดิมต่อได้
     $('#who').classList.add('hidden'); $('#logout').classList.add('hidden'); showNav(false);
     $('#login-pin').value = '';
     $('#login-id').value = store.get('lastId') || '';
@@ -143,7 +143,17 @@
     let top = '';
     if (checkinResult) {
       const r = checkinResult;
-      if (r.ok) {
+      if (r.ok && r.test) {   // ผลทดสอบ: ไม่ได้บันทึกจริง บอกด้วยว่าถ้าเป็นเวลาจริงจะเกิดอะไรขึ้น
+        const note = { open: 'ตอนนี้อยู่ในช่วงรับเช็กชื่อจริง นักเรียนกดเช็กได้ตามปกติ',
+          notyet: `คาบนี้เปิดให้นักเรียนเช็กจริงตั้งแต่วันที่ ${thDate(r.date)} (ก่อนหน้านั้นนักเรียนจะเช็กไม่ได้)`,
+          late: `ตอนนี้เลยเวลารับเช็กชื่อ (${thTime(r.closeAt)} น.) แล้ว นักเรียนจะเช็กไม่ได้`,
+          closed: 'คาบนี้ปิดแล้ว นักเรียนจะเช็กไม่ได้' }[r.live] || '';
+        top = `<div class="result ok" role="status">
+          <div class="big" aria-hidden="true">${icon('checkCircle')}</div>
+          <h2>ทดสอบสำเร็จ ระบบเช็กชื่อใช้งานได้</h2>
+          <p>${r.already ? 'นักเรียนคนนี้เช็กชื่อไว้แล้วในคาบนี้' : 'ถ้าเป็นการเช็กจริงจะได้สถานะ <b>' + (r.status === 'late' ? 'มาสาย' : 'มาเรียนตรงเวลา') + '</b>'}${r.subject ? '<br>' + esc(r.subject) : ''}</p>
+          <p class="small">${esc(note)}</p><p class="small"><b>นี่คือโหมดทดสอบ ไม่ได้บันทึกข้อมูลจริง</b></p></div>`;
+      } else if (r.ok) {
         const late = r.status === 'late';
         top = `<div class="result ${late ? 'warn' : 'ok'}" role="status">
           <div class="big" aria-hidden="true">${icon(late ? 'clock' : 'checkCircle')}</div>
@@ -181,7 +191,7 @@
     if (cb) cb.addEventListener('click', () => busy(cb, async () => {
       const l = confirmLink;
       try {
-        checkinResult = { ok: true, ...(await api('checkin', { token: session.token, sessionId: l.s, t: l.t, deviceId: deviceId() })) };
+        checkinResult = { ok: true, ...(await api('checkin', { token: session.token, sessionId: l.s, t: l.t, deviceId: deviceId(), ...(l.x ? { test: true, x: l.x } : {}) })) };
         confirmLink = null;
       } catch (e) {
         if (authLost(e)) return;
@@ -213,12 +223,13 @@
   }[i.state] || '');
   function confirmCard() {
     const i = confirmLink.info, st = session.student, bad = i && i.state !== 'open';
-    return `<div class="card"><h2>${icon('userCheck')}ยืนยันการเช็กชื่อ</h2>
+    const test = !!confirmLink.x;
+    return `<div class="card"><h2>${icon('userCheck')}${test ? 'ทดสอบเช็กชื่อ (ไม่บันทึกจริง)' : 'ยืนยันการเช็กชื่อ'}</h2>
       <p style="font-size:1.2em;margin:.2rem 0"><b>${esc(st.name)}</b></p>
       <p class="small muted" style="margin:0 0 .6rem">เลขประจำตัว ${esc(st.id)} · ห้อง ${esc(st.room)}</p>
       ${i ? `<p class="small" style="margin:0 0 .6rem">${icon('calendar')} <b>${esc(i.subject || 'คาบเรียน')}${i.classLabel ? ' · ' + esc(i.classLabel) : ''}</b> · ${esc(thDate(i.date))}${i.label ? ' · ' + esc(i.label) : ''}<br>รับเช็กชื่อถึง ${esc(thTime(i.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(i.onTimeUntil))} น.</p>` : ''}
-      ${bad ? `<p class="result warn small" style="margin:0 0 .6rem">${icon('alert')} ${esc(stateText(i))}</p>` : ''}
-      <button class="btn primary block" id="ci-confirm" type="button" style="font-size:1.15rem;min-height:56px" ${bad ? 'disabled' : ''}>${icon('userCheck')} ใช่ ยืนยันเช็กชื่อ</button>
+      ${bad ? `<p class="result warn small" style="margin:0 0 .6rem">${icon('alert')} ${esc(stateText(i))}${test ? ' (โหมดทดสอบ ยังกดทดสอบได้)' : ''}</p>` : ''}
+      <button class="btn primary block" id="ci-confirm" type="button" style="font-size:1.15rem;min-height:56px" ${bad && !test ? 'disabled' : ''}>${icon('userCheck')} ${test ? 'ทดสอบกดเช็กชื่อ' : 'ใช่ ยืนยันเช็กชื่อ'}</button>
       <button class="btn block" id="ci-notme" type="button" style="margin-top:8px">ไม่ใช่ฉัน (เปลี่ยนคน)</button></div>`;
   }
 
@@ -446,7 +457,7 @@
       linkInfo = await api('sessionInfo', { s: pending.s, t: pending.t }, { tries: 2 });
       const bad = linkInfo.state !== 'open';
       box.className = 'result ' + (bad ? 'warn' : 'ok');
-      box.innerHTML = `<b>${icon('calendar')} ${esc(linkInfo.subject || 'คาบเรียน')}${linkInfo.classLabel ? ' · ' + esc(linkInfo.classLabel) : ''}</b><br><span class="small">${esc(thDate(linkInfo.date))}${linkInfo.label ? ' · ' + esc(linkInfo.label) : ''} · รับเช็กชื่อถึง ${esc(thTime(linkInfo.closeAt))} น.${bad ? '<br><b>' + esc(stateText(linkInfo)) + '</b>' : ''}</span>`;
+      box.innerHTML = (pending.x ? `<b>${icon('shield')} โหมดทดสอบ</b> <span class="small">ไม่บันทึกข้อมูลจริง ใช้ได้ทุกวัน/เวลา</span><br>` : '') + `<b>${icon('calendar')} ${esc(linkInfo.subject || 'คาบเรียน')}${linkInfo.classLabel ? ' · ' + esc(linkInfo.classLabel) : ''}</b><br><span class="small">${esc(thDate(linkInfo.date))}${linkInfo.label ? ' · ' + esc(linkInfo.label) : ''} · รับเช็กชื่อถึง ${esc(thTime(linkInfo.closeAt))} น.${bad ? '<br><b>' + esc(stateText(linkInfo)) + '</b>' : ''}</span>`;
     } catch (e) {
       box.className = 'result bad'; box.innerHTML = `${icon('alert')} ${esc(e.message || 'ลิงก์ไม่ถูกต้อง')}`;
     }

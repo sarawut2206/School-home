@@ -96,12 +96,12 @@
       ${open ? `<div class="card">
         <div class="qrbox" id="qrbox"><div id="qr" role="img" aria-label="QR Code เช็กชื่อ"></div>
           <div class="count" id="qrcount"></div>${rot ? '<div class="countdown" id="cd"></div>' : ''}</div>
-        <div class="row" style="margin-top:12px">${rot ? '' : '<button class="btn primary grow" id="qr-img" type="button">' + icon('send') + 'ส่งรูป QR ให้นักเรียน</button>'}<button class="btn grow" id="fs" type="button">${icon('expand')}แสดงเต็มจอ</button><button class="btn danger grow" id="close" type="button">${icon('lock')}ปิดคาบ (บันทึกขาด)</button></div>
+        <div class="row" style="margin-top:12px">${rot ? '' : '<button class="btn primary grow" id="qr-img" type="button">' + icon('send') + 'ส่งรูป QR ให้นักเรียน</button>'}${rot ? '' : '<button class="btn grow" id="qr-test0" type="button">' + icon('shield') + 'ทดสอบลิงก์เช็กชื่อ</button>'}<button class="btn grow" id="fs" type="button">${icon('expand')}แสดงเต็มจอ</button><button class="btn danger grow" id="close" type="button">${icon('lock')}ปิดคาบ (บันทึกขาด)</button></div>
         <p class="small muted" style="margin-top:8px">${rot ? 'QR เปลี่ยนรหัสอัตโนมัติ (คาบแบบเก่า) ' : 'QR 1 อัน ต่อ 1 คาบ ไม่เปลี่ยนรหัส ' + (st.session.app ? '· นักเรียนกดเช็กชื่อในแอปได้ด้วย ' : '')}· รับเช็กชื่อถึง ${esc(thTime(st.session.closeAt))} น. · ตรงเวลาถึง ${esc(thTime(st.session.onTimeUntil))} น.</p></div>` : ''}
       <div class="card" id="roster"></div></div>`;
     drawRoster(st);
     if (open) {
-      if (!rot) $('#qr-img').addEventListener('click', () => showQrResult(st.session));
+      if (!rot) { $('#qr-img').addEventListener('click', () => showQrResult(st.session)); $('#qr-test0').addEventListener('click', () => openTestLink(st.session)); }
       $('#fs').addEventListener('click', () => { const q = $('#qrbox'); if (document.fullscreenElement) document.exitFullscreen(); else if (q.requestFullscreen) q.requestFullscreen(); else toast('เบราว์เซอร์นี้ไม่รองรับเต็มจอ', true); });
       $('#close').addEventListener('click', async (e) => {
         if (!confirm('ปิดคาบนี้? คนที่ยังไม่เช็กชื่อจะถูกบันทึกเป็น "ขาด" (แก้ไขภายหลังได้)')) return;
@@ -325,6 +325,16 @@
     });
   }
 
+  // ทดสอบเช็กชื่อด้วยลิงก์จริงที่ส่งให้นักเรียน (เพิ่มรหัสทดสอบ): ใช้ได้ทุกวัน/เวลา ไม่บันทึกอะไร
+  async function openTestLink(s) {
+    const w = window.open('', '_blank');   // เปิดแท็บก่อน (กันเบราว์เซอร์บล็อกป๊อปอัป) แล้วค่อยใส่ลิงก์
+    try {
+      const r = await T('t_token', { sessionId: s.sessionId });
+      const url = `${siteBase()}student.html?s=${encodeURIComponent(s.sessionId)}&t=${encodeURIComponent(r.token)}&x=${encodeURIComponent(r.test)}`;
+      if (w) w.location = url; else { toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ อนุญาตป๊อปอัปแล้วกดอีกครั้ง', true); }
+    } catch (e) { if (w) w.close(); fail(e); }
+  }
+
   async function showQrResult(s) {
     let token;
     try { token = (await T('t_token', { sessionId: s.sessionId })).token; } catch (e) { fail(e); return; }
@@ -336,12 +346,13 @@
     const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
     const close = openModal(`
       <div class="row"><h2 class="grow" style="margin:0">${icon('checkCircle')}QR พร้อมส่งให้นักเรียน</h2><button class="btn sm" id="qr-x" type="button">${icon('x')}ปิด</button></div>
-      <p class="small muted">บันทึกรูปนี้แล้วส่งใน LINE กลุ่มห้อง ใช้สแกนได้${s.date !== todayStr() ? ` ในวันที่ ${esc(thDate(s.date))}` : ''} ถึง ${esc(thTime(s.closeAt))} น. (ตรงเวลาถึง ${esc(thTime(s.onTimeUntil))} น.)</p>
+      <p class="small muted"><b>ทดสอบก่อนส่ง:</b> กด "ทดสอบเช็กชื่อ" เพื่อลองเปิดลิงก์เหมือนนักเรียน ใส่เลขประจำตัวใครก็ได้ในห้อง ทดสอบได้ทุกวัน/เวลา และไม่บันทึกข้อมูลจริง (อย่าส่งลิงก์ทดสอบให้นักเรียน)<br>บันทึกรูปนี้แล้วส่งใน LINE กลุ่มห้อง ใช้สแกนได้${s.date !== todayStr() ? ` ในวันที่ ${esc(thDate(s.date))}` : ''} ถึง ${esc(thTime(s.closeAt))} น. (ตรงเวลาถึง ${esc(thTime(s.onTimeUntil))} น.)</p>
       <img src="${URL.createObjectURL(blob)}" alt="QR Code เช็กชื่อ ${esc(s.subject)}" style="width:100%;max-width:440px;display:block;margin:0 auto 12px;border:1px solid var(--line);border-radius:12px">
       <div class="row">
         <button class="btn primary grow" id="qr-save" type="button">${icon('download')} บันทึกรูป</button>
         ${canShare ? '<button class="btn grow" id="qr-share" type="button">' + icon('share') + ' แชร์รูป (LINE ฯลฯ)</button>' : ''}
         <button class="btn grow" id="qr-copy" type="button">${icon('link')}คัดลอกลิงก์</button>
+        <button class="btn grow" id="qr-test" type="button">${icon('shield')}ทดสอบเช็กชื่อ</button>
         <button class="btn grow" id="qr-open" type="button">${icon('users')}ดูรายชื่อ / ปิดคาบ</button></div>`);
     $('#qr-x').addEventListener('click', close);
     $('#qr-save').addEventListener('click', () => {
@@ -351,6 +362,7 @@
     if (canShare) $('#qr-share').addEventListener('click', async () => {
       try { await navigator.share({ files: [file], title: 'เช็กชื่อเข้าเรียน', text: `สแกนเพื่อเช็กชื่อ ${s.subject} ถึง ${thTime(s.closeAt)} น.` }); } catch (e) { /* ยกเลิกการแชร์ */ }
     });
+    $('#qr-test').addEventListener('click', () => openTestLink(s));
     $('#qr-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว'); } catch (e) { prompt('คัดลอกลิงก์นี้', url); } });
     $('#qr-open').addEventListener('click', () => { close(); setRoom(s.room); openTab('checkin'); });
   }
