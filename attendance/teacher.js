@@ -75,11 +75,27 @@
     try {
       const r = await T('t_sessions', { room: state.room });
       const box = $('#ck-past'); if (!box) return;
-      box.innerHTML = r.sessions.length ? `<div class="scroll"><table><thead><tr><th>วันที่</th><th>วิชา</th><th class="num">มาเรียน</th><th>สถานะ</th><th></th></tr></thead><tbody>${r.sessions.map((s) =>
-        `<tr><td>${esc(thDate(s.date))} ${esc(thTime(s.openedAt))}</td><td>${esc(s.subject)}</td><td class="num">${s.present}</td><td>${s.status === 'open' ? badge('pending', 'เปิดอยู่') : badge('done', 'ปิดแล้ว')}</td><td><button class="btn sm" data-s="${esc(s.sessionId)}" type="button">${s.status === 'open' ? 'แสดง QR' : 'ดู/แก้ไข'}</button></td></tr>`).join('')}</tbody></table></div>` : 'ยังไม่เคยเปิดคาบ';
+      box.innerHTML = r.sessions.length ? `<div class="scroll"><table><thead><tr><th>วันที่</th><th>วิชา</th><th class="num">มาเรียน</th><th>สถานะ</th><th></th><th></th></tr></thead><tbody>${r.sessions.map((s) =>
+        `<tr><td>${esc(thDate(s.date))} ${esc(thTime(s.openedAt))}</td><td>${esc(s.subject)}</td><td class="num">${s.present}</td><td>${s.status === 'open' ? badge('pending', 'เปิดอยู่') : badge('done', 'ปิดแล้ว')}</td><td><button class="btn sm" data-s="${esc(s.sessionId)}" type="button">${s.status === 'open' ? 'แสดง QR' : 'ดู/แก้ไข'}</button></td><td><button class="btn sm danger" data-delsess="${esc(s.sessionId)}" data-n="${s.present}" data-name="${esc(s.subject + ' ' + thDate(s.date))}" type="button" aria-label="ลบคาบ ${esc(s.subject)} ${esc(thDate(s.date))}">${icon('trash')}ลบ</button></td></tr>`).join('')}</tbody></table></div>` : 'ยังไม่เคยเปิดคาบ';
+      $$('[data-delsess]', box).forEach((b) => b.addEventListener('click', () => deleteSession(b.dataset.delsess, b.dataset.name, Number(b.dataset.n))));
       $$('[data-s]', box).forEach((b) => b.addEventListener('click', () => { showSession(b.dataset.s); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
       const open = r.sessions.find((s) => s.status === 'open');
       if (autoOpen && open) showSession(open.sessionId);
+    } catch (e) { fail(e); }
+  }
+
+  // ยืนยันก่อนลบ: ถ้ามีข้อมูลอยู่ให้พิมพ์คำว่า "ลบ" กันกดพลาด (ลบแล้วกู้คืนไม่ได้)
+  function confirmDelete(msg, hasData) {
+    if (!hasData) return confirm(msg);
+    return (prompt(msg + '\n\nพิมพ์คำว่า ลบ เพื่อยืนยัน') || '').trim() === 'ลบ';
+  }
+  async function deleteSession(sid, name, present) {
+    if (!confirmDelete(`ลบคาบ "${name}" ถาวร?\n${present ? `ข้อมูลเช็กชื่อของคาบนี้ทั้งหมด (มาเรียน ${present} คน และรายชื่อที่บันทึกขาด/ลา) จะถูกลบและกู้คืนไม่ได้` : 'คาบนี้ยังไม่มีใครเช็กชื่อ'}\nใช้เมื่อสร้างผิดหรือซ้อมเท่านั้น`, true)) return;
+    try {
+      const r = await T('t_deleteSession', { sessionId: sid });
+      if (live.sid === sid) { stopLive(); live.sid = null; const lv = $('#ck-live'); if (lv) lv.innerHTML = ''; }
+      toast(`ลบคาบแล้ว (ลบข้อมูลเช็กชื่อ ${r.attendance} รายการ)`);
+      await loadPast();
     } catch (e) { fail(e); }
   }
 
@@ -523,7 +539,13 @@
           <div class="small">ส่งแล้ว ${a.submitted}/${a.total} · รอตรวจ ${a.pending} ${a.status === 'closed' ? badge('none', 'ปิดรับแล้ว') : ''}</div></div>
         <button class="btn sm" data-link="${esc(a.assignmentId)}" type="button">คัดลอกลิงก์ส่งงาน</button>
         <button class="btn sm primary" data-review="${esc(a.assignmentId)}" data-room="${esc(a.room)}" type="button">${icon('review')}ตรวจงาน</button>
-        <button class="btn sm" data-toggle="${esc(a.assignmentId)}" data-to="${a.status === 'open' ? 'closed' : 'open'}" type="button">${a.status === 'open' ? 'ปิดรับ' : 'เปิดรับอีกครั้ง'}</button></div>`).join('') : 'ยังไม่มีงาน';
+        <button class="btn sm" data-toggle="${esc(a.assignmentId)}" data-to="${a.status === 'open' ? 'closed' : 'open'}" type="button">${a.status === 'open' ? 'ปิดรับ' : 'เปิดรับอีกครั้ง'}</button>
+        <button class="btn sm danger" data-delasg="${esc(a.assignmentId)}" data-n="${a.submitted}" data-name="${esc(a.title)}" type="button" aria-label="ลบงาน ${esc(a.title)}">${icon('trash')}ลบ</button></div>`).join('') : 'ยังไม่มีงาน';
+      $$('[data-delasg]', box).forEach((b) => b.addEventListener('click', async () => {
+        const n = Number(b.dataset.n);
+        if (!confirmDelete(`ลบงาน "${b.dataset.name}" ถาวร?\n${n ? `ข้อมูลการส่งของนักเรียน ${n} คน ใบหลักฐาน และคะแนนของงานนี้จะถูกลบและกู้คืนไม่ได้ (โฟลเดอร์รูปใน Drive ย้ายไปถังขยะ)` : 'งานนี้ยังไม่มีใครส่ง'}\nใช้เมื่อสร้างผิดหรือซ้อมเท่านั้น`, true)) return;
+        try { const r = await T('t_deleteAssignment', { assignmentId: b.dataset.delasg }); toast(`ลบงานแล้ว (ลบรายการส่ง ${r.submissions} รายการ)`); if (reviewSel === b.dataset.delasg) reviewSel = ''; loadAssignments(); } catch (e) { fail(e); }
+      }));
       $$('[data-link]', box).forEach((b) => b.addEventListener('click', async () => {
         const url = `${siteBase()}student.html?a=${encodeURIComponent(b.dataset.link)}`;
         try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์ส่งงานแล้ว นำไปส่งใน LINE ได้เลย'); } catch (e) { prompt('คัดลอกลิงก์นี้', url); }
