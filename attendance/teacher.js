@@ -653,7 +653,7 @@
     put(scope === 'missing' ? 'รายชื่อนักเรียนที่ยังไม่ส่งงาน' : 'รายชื่อนักเรียนและสถานะการส่งงาน', M, y, { s: 32, w: 700, c: NAVY });
     g.fillStyle = LINE; g.fillRect(M, y + 14, W - 2 * M, 2);
     y += 36;
-    const footerTop = H - 222, area = footerTop - y - 10;
+    const footerTop = H - 252, area = footerTop - y - 10;
     if (!rows.length) {
       put('ส่งงานครบทุกคนแล้ว ไม่มีรายชื่อที่ยังไม่ส่ง', W / 2, y + area / 2, { s: 40, w: 700, c: '#0f7b55', a: 'center' });
     } else {
@@ -689,9 +689,9 @@
     put('หมายเหตุ: รายงานนี้แสดงสถานะการส่งงานตามข้อมูลในระบบ ณ เวลาที่ระบุ', M, footerTop + 44, { s: 22, c: GRAY });
     put('นักเรียนที่ยังไม่ส่ง กรุณาส่งงานผ่านระบบโดยเร็วที่สุด หรือติดต่อครูผู้สอน', M, footerTop + 76, { s: 22, c: GRAY });
     const sx = W - M - 360;
-    put('ครูผู้สอน', sx + 180, footerTop + 120, { s: 22, c: GRAY, a: 'center' });
-    g.fillStyle = '#94a3b8'; for (let x = sx; x < sx + 360; x += 8) g.fillRect(x, footerTop + 150, 4, 2);
-    put((window.APP_CONFIG && APP_CONFIG.TEACHER) || '', sx + 180, footerTop + 184, { s: 28, w: 700, c: NAVY, a: 'center', max: 360 });
+    put('ครูผู้สอน', sx + 180, footerTop + 98, { s: 22, c: GRAY, a: 'center' });
+    g.fillStyle = '#94a3b8'; for (let x = sx; x < sx + 360; x += 8) g.fillRect(x, footerTop + 140, 4, 2);
+    put((window.APP_CONFIG && APP_CONFIG.TEACHER) || '', sx + 180, footerTop + 180, { s: 30, w: 700, c: NAVY, a: 'center', max: 360 });
     g.fillStyle = NAVY; g.fillRect(0, H - 52, W, 52);
     put('NK EduTrack • STUDENT SUBMISSION REPORT', W / 2, H - 20, { s: 20, w: 700, c: '#ffffff', a: 'center' });
     return c;

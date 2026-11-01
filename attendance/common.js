@@ -1,6 +1,6 @@
 /* ตัวช่วยกลาง: เรียก API (Google Apps Script), เก็บค่าในเครื่อง, จัดรูปแบบวันที่ไทย */
 (function () {
-  const VERSION = '20261101c';
+  const VERSION = '20261101d';
   // ถ้าสคริปต์พัง ให้ขึ้นแถบแดงบอกสาเหตุ (ไม่เงียบ) นักเรียนถ่ายภาพหน้าจอส่งครูได้
   const showFatal = (msg) => {
     if (document.getElementById('fatal-bar')) return;
