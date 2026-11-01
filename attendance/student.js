@@ -243,7 +243,7 @@
         <input id="cam" type="file" accept="image/*" capture="environment" class="hidden">
         <input id="pick" type="file" accept="image/*" multiple class="hidden">
         <input id="pdf" type="file" accept="application/pdf,.pdf" multiple class="hidden">
-        <p class="small muted" style="margin-top:8px">ถ่ายให้เห็นตัวหนังสือชัด แสงพอ เห็นทั้งหน้า ส่งได้หลายรูป (เรียงตามหน้า) หรือแนบไฟล์ <b>PDF</b> (ไม่เกิน 5 MB ต่อไฟล์) รวมกันไม่เกิน 8 ไฟล์ต่อครั้ง</p>
+        <p class="small muted" style="margin-top:8px">ถ่ายให้เห็นตัวหนังสือชัด แสงพอ เห็นทั้งหน้า ส่งได้หลายรูป (เรียงตามหน้า) หรือแนบไฟล์ <b>PDF</b> (ไม่เกิน 500 MB ต่อไฟล์) รวมกันไม่เกิน 8 ไฟล์ต่อครั้ง</p>
         <div class="thumbs" id="thumbs" aria-live="polite"></div>
         <div id="progress" class="hidden"><div class="bar"><i style="width:0"></i></div><p class="small center" id="progress-text"></p></div>
         <button class="btn ok block" id="sub-send" type="button" disabled>${icon('send')}ส่งงาน</button>
@@ -267,14 +267,16 @@
     drawThumbs();
   }
 
-  const MAX_PDF = 5 * 1024 * 1024;
+  const MAX_FILE = 500 * 1024 * 1024;   // PDF ขนาดสูงสุด
+  const SMALL_PDF = 5 * 1024 * 1024;    // ไม่เกินนี้ส่งผ่านสคริปต์ตามปกติ ใหญ่กว่านี้อัปโหลดเป็นก้อนเข้า Drive โดยตรง
   const isPdf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
   // PDF ส่งทั้งไฟล์ตามเดิม (ไม่ย่อ) จึงจำกัดขนาด และเช็กหัวไฟล์ %PDF- กันไฟล์เสียหรือเปลี่ยนนามสกุล
   async function readPdf(file) {
     const bad = (m) => Object.assign(new Error('pdf'), { pdfMsg: m });
-    if (file.size > MAX_PDF) throw bad(`${file.name} ใหญ่เกิน 5 MB (${(file.size / 1048576).toFixed(1)} MB) ลองลดขนาดไฟล์หรือถ่ายรูปส่งแทน`);
-    const buf = new Uint8Array(await file.arrayBuffer());
-    if (String.fromCharCode(...buf.slice(0, 5)) !== '%PDF-') throw bad(`${file.name} ไม่ใช่ไฟล์ PDF ที่ถูกต้อง`);
+    if (file.size > MAX_FILE) throw bad(`${file.name} ใหญ่เกิน 500 MB (${(file.size / 1048576).toFixed(1)} MB) ลองลดขนาดไฟล์`);
+    const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    if (String.fromCharCode(...head) !== '%PDF-') throw bad(`${file.name} ไม่ใช่ไฟล์ PDF ที่ถูกต้อง`);
+    if (file.size > SMALL_PDF) return { pdf: true, big: true, file, name: file.name, url: '', size: file.size };   // ไม่อ่านเข้าหน่วยความจำ ส่งเป็นก้อนทีหลัง
     const b64 = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(file); });
     return { pdf: true, name: file.name, b64, url: URL.createObjectURL(file), size: file.size };
   }
@@ -307,22 +309,65 @@
     return { b64, url: URL.createObjectURL(blob), size: blob.size };
   }
 
+  // PDF ใหญ่: ขอลิงก์อัปโหลดจากสคริปต์ แล้วส่งเข้า Drive โดยตรงทีละก้อน (ก้อนไหนล้มลองซ้ำเอง) แล้วแจ้งสคริปต์ให้บันทึกลงรายการส่งงาน
+  async function uploadBig(p, idx, onProgress) {
+    const base = { token: session.token, assignmentId: activeAsg.assignmentId, batchId, idx };
+    const start = await api('fileStart', { ...base, size: p.size, name: p.name, origin: location.origin }, { tries: 4 });
+    let fileId = start.fileId || '';
+    if (!start.done) {
+      let offset = 0;
+      const total = p.size, CH = start.chunk || 8 * 1024 * 1024;
+      const parseRange = (res) => { const m = /bytes=0-(\d+)/.exec(res.headers.get('Range') || ''); return m ? Number(m[1]) + 1 : null; };
+      while (offset < total) {
+        const end = Math.min(offset + CH, total);
+        let sent = false, last = null;
+        for (let t = 0; t < 6 && !sent; t++) {
+          try {
+            const res = await fetch(start.uploadUrl, { method: 'PUT', headers: { 'Content-Range': `bytes ${offset}-${end - 1}/${total}` }, body: p.file.slice(offset, end) });
+            if (res.status === 308) { offset = Math.min(end, parseRange(res) || end); sent = true; }
+            else if (res.ok) { try { fileId = (await res.json()).id || ''; } catch (e) { /* อ่านผลไม่ได้ ให้สคริปต์หาไฟล์จากชื่อแทน */ } offset = total; sent = true; }
+            else last = new Error('HTTP ' + res.status);
+          } catch (e) { last = e; }
+          if (!sent) {
+            await wait(1500 * (t + 1));
+            try {   // ถามสถานะ: ถ้า Drive ได้ไฟล์ครบแล้วหรือรับก้อนนี้แล้ว จะได้ไม่ส่งซ้ำ
+              const q = await fetch(start.uploadUrl, { method: 'PUT', headers: { 'Content-Range': `bytes */${total}` } });
+              if (q.ok) { try { fileId = (await q.json()).id || ''; } catch (e) { /* ใช้ชื่อไฟล์แทน */ } offset = total; sent = true; }
+              else if (q.status === 308) { const o = parseRange(q); if (o !== null && o >= end) { offset = o; sent = true; } }
+            } catch (e) { /* ยังต่อเน็ตไม่ได้ วนลองใหม่ */ }
+          }
+        }
+        if (!sent) throw new Error('อัปโหลดไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกดส่งอีกครั้ง (ไฟล์ที่ส่งไปแล้วไม่ต้องส่งใหม่ทั้งหมด)');
+        onProgress(offset / total);
+      }
+    }
+    await api('fileDone', { ...base, fileId, fileName: start.name, size: p.size, name: p.name }, { tries: 4 });
+  }
+
   async function send() {
     const btn = $('#sub-send'), total = photos.length;
     batchId = batchId || uuid();
     const bar = $('#progress'), fill = $('#progress i'), txt = $('#progress-text');
     btn.disabled = true; bar.classList.remove('hidden');
     $('#cam').disabled = true; $('#pick').disabled = true; $('#pdf').disabled = true;
+    const guard = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', guard);   // กันปิดหน้าระหว่างอัปโหลดไฟล์ใหญ่
     try {
       for (let i = 0; i < total; i++) {
         txt.textContent = `กำลังส่งไฟล์ที่ ${i + 1} จาก ${total} … อย่าปิดหน้านี้`;
         fill.style.width = (i / total * 100) + '%';
+        if (photos[i].big) {
+          const mb = photos[i].size / 1048576;
+          await uploadBig(photos[i], i, (f) => { fill.style.width = ((i + f) / total * 100) + '%'; txt.textContent = `กำลังส่งไฟล์ที่ ${i + 1} จาก ${total} · ${Math.round(f * 100)}% (${(mb * f).toFixed(1)}/${mb.toFixed(1)} MB) … อย่าปิดหน้านี้`; });
+          continue;
+        }
         await api('submitImage', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, idx: i, data: photos[i].b64, ...(photos[i].pdf ? { mime: 'application/pdf', name: photos[i].name } : {}) }, { tries: 4 });
       }
       fill.style.width = '100%'; txt.textContent = 'กำลังออกใบหลักฐาน…';
       const receipt = await api('submitFinish', { token: session.token, assignmentId: activeAsg.assignmentId, batchId, count: total }, { tries: 4 });
       const title = activeAsg.title, urls = photos.map((p) => p.url), pdfs = photos.map((p) => p.pdf ? { pdf: true, name: p.name } : null);
       photos = []; activeAsg = null; batchId = null;
+      window.removeEventListener('beforeunload', guard);
       await refresh();
       switchTab('submit');
       $('#tab-submit').insertAdjacentHTML('afterbegin', `<div class="result ok" role="status" style="margin-top:14px"><div class="big" aria-hidden="true">${icon('checkCircle')}</div><h2>ส่งงานเรียบร้อย</h2><p>${esc(title)} · ${total} ไฟล์ · เลขที่ ${esc(receipt.receipt.receiptId)}</p></div>`);
@@ -330,6 +375,7 @@
       await Receipt.show(receipt, () => Promise.all(urls.map((u, i) => pdfs[i] || Receipt.loadImage(u))));
       urls.forEach((u) => URL.revokeObjectURL(u));
     } catch (e) {
+      window.removeEventListener('beforeunload', guard);
       if (authLost(e)) return;
       toast((e.message || 'ส่งไม่สำเร็จ') + ' (ไฟล์ที่เลือกยังอยู่ กดส่งอีกครั้งได้)', true);
       $('#cam').disabled = false; $('#pick').disabled = false; $('#pdf').disabled = false; btn.disabled = false; bar.classList.add('hidden');
